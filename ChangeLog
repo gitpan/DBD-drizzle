@@ -1,0 +1,10 @@
+2008-11-19 Patrick Galbraith <patg@patg.net> (0.002)
+
+* Working!
+* Removed all server prepared statement code
+* Changed data types to new DRIZZLE_xx types, removed those that have been chopped
+* Much debugging, cruft cleanage
+
+2008-7-21 Patrick Galbraith <patg@patg.net> (0.001)
+
+* First Version 
