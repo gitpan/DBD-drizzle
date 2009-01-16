@@ -33,8 +33,6 @@ Getopt::Long::GetOptions(
     "testdb=s",
     "testhost=s",
     "testport=s",
-    "testuser=s",
-    "testpassword=s",
     "cflags=s",
     "libs=s",
     "verbose",
@@ -82,8 +80,7 @@ MSG
   }
 }
 
-for my $key (qw/testdb testhost testuser testpassword cflags libs 
-    nocatchstderr ssl nofoundrows ps-protocol/)
+for my $key (qw/testdb testhost cflags libs nocatchstderr ssl nofoundrows/)
 {
   Configure($opt, $source, $key);
 }
@@ -129,8 +126,8 @@ my $fileName = $@ ?
  (print FILE ("{ local " . Data::Dumper->Dump([$opt], ["opt"]) .
 	      "\$::test_host = \$opt->{'testhost'};\n" .
 	      "\$::test_port = \$opt->{'testport'};\n" .
-	      "\$::test_user = \$opt->{'testuser'};\n" .
-	      "\$::test_password = \$opt->{'testpassword'};\n" .
+	      "\$::test_user = '';\n" .
+	      "\$::test_password = '';\n" .
 	      "\$::test_db = \$opt->{'testdb'};\n" .
 	      "\$::test_dsn = \"DBI:drizzle:\$::test_db\";\n" .
               "\$::test_dsn .= \":\$::test_host\" if \$::test_host;\n" .
@@ -200,10 +197,6 @@ Possible options are:
                          value
   --testdb=<db>          Use the database <db> for running the test suite;
                          defaults to $TESTDB
-  --testuser=<user>      Use the username <user> for running the test suite;
-                         defaults to no username
-  --testpassword=<pwd>   Use the password <pwd> for running the test suite;
-                         defaults to no password
   --testhost=<host>      Use <host> as a database server for running the
                          test suite; defaults to localhost.
   --testport=<port>      Use <port> as the port number of the database;
@@ -248,15 +241,15 @@ sub Configure
 {
   my($opt, $source, $param) = @_;
 
-  if ($param eq 'ps-protocol')
-  {
-      $source->{$param}= ($opt->{$param}) ? "User's choice" : 'default';
-      return;
-  }
   if (exists($opt->{$param}))
   {
     $source->{$param} = "User's choice";
     return;
+  }
+  if ($param eq "testdb") 
+  {
+    $source->{$param} = "default";
+    $opt->{$param} = $TESTDB;
   }
 
   if ($^O !~ /mswin32/i)
@@ -276,6 +269,9 @@ sub Configure
               while (defined(my $line = <PIPE>)) 
               {
                   $str .= $line;
+              }
+              if ($param eq 'libs') {
+                $str .= ' -lz';
               }
               if ($str ne ""  &&  $str !~ /Options:/) 
               {
@@ -299,34 +295,10 @@ sub Configure
       }
   }
 
-  # Ok, pkg-config doesn't work. We need to do our best
-  if ($param eq 'testuser') {
-      unless ($opt->{$param}) {
-        print "
-
-PLEASE NOTE:
-
-Drizzle doesn't have user privileges. Ha!
-
-";
-      $opt->{$param}= $ENV{USER};
-      }
-  }
   elsif ($param eq "nocatchstderr" || $param eq "nofoundrows")
   {
     $source->{$param} = "default";
     $opt->{$param} = 0;
-  }
-  elsif ($param eq "testdb") 
-  {
-    $source->{$param} = "default";
-    $opt->{$param} = $TESTDB;
-  }
-  elsif ($param eq "testhost" || $param eq "testport"  ||  
-        $param eq "testpassword")
-  {
-    $source->{$param} = "default";
-    $opt->{$param} = "";
   }
   elsif ($param eq "cflags") 
   {
@@ -350,7 +322,6 @@ MSG
   elsif ($param eq "libs") 
   {
     $source->{$param} = "guessed";
-
 
     my @files=();
     my $default_libs;

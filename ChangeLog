@@ -1,3 +1,9 @@
+2009-01-16 Patrick Galbraith <patg@patg.net> (0.003)
+* More tests working, though some give out of memory
+* Last version with this client lib, switchng to Eday's lib next
+* Ripped out even more cruft
+* Major work on types struct from hell
+
 2008-11-19 Patrick Galbraith <patg@patg.net> (0.002)
 
 * Working!

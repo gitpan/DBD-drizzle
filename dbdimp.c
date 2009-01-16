@@ -342,7 +342,7 @@ static char *parse_params(
             if (!is_num)
             {
               *ptr++ = '\'';
-              ptr += drizzle_real_escape_string(con, ptr, valbuf, vallen);
+              ptr += drizzle_escape_string(ptr, valbuf, vallen);
               *ptr++ = '\'';
             }
             else
@@ -1561,6 +1561,7 @@ SV* dbd_db_FETCH_attrib(SV *dbh, imp_dbh_t *imp_dbh, SV *keysv)
       result= sv_2mortal(newSViv((IV) imp_dbh->pdrizzle));
     else if (strEQ(key, "sockfd"))
       result= sv_2mortal(newSViv((IV) imp_dbh->pdrizzle->net.fd));
+#ifdef DRIZZLE_STAT
     else if (strEQ(key, "stat"))
     {
       const char* stats = drizzle_stat(imp_dbh->pdrizzle);
@@ -1575,7 +1576,7 @@ SV* dbd_db_FETCH_attrib(SV *dbh, imp_dbh_t *imp_dbh, SV *keysv)
         sv_2mortal(newSVpv(stats, strlen(stats))) : &sv_undef;
     }
     break;
-
+#endif
   case 't':
     if (kl == 9  &&  strEQ(key, "thread_id"))
       result= sv_2mortal(newSViv(drizzle_thread_id(imp_dbh->pdrizzle)));
@@ -3033,7 +3034,7 @@ SV* dbd_db_quote(SV *dbh, SV *str, SV *type)
     sptr= SvPVX(result);
 
     *sptr++ = '\'';
-    sptr+= drizzle_real_escape_string(imp_dbh->pdrizzle, sptr,
+    sptr+= drizzle_escape_string(sptr,
                                      ptr, len);
     *sptr++= '\'';
     SvPOK_on(result);

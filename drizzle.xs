@@ -41,33 +41,37 @@ _ListDBs(drh, host=NULL, port=NULL, user=NULL, password=NULL)
     char *      password
   PPCODE:
 {
-    DRIZZLE drizzle;
-    DRIZZLE* con= drizzle_dr_connect(drh, &drizzle, NULL, host, port, user, password,
-				   NULL, NULL);
-    if (con != NULL)
+  DRIZZLE drizzle;
+  DRIZZLE* con= drizzle_dr_connect(drh, &drizzle, NULL, host, port, user, password,
+                                   NULL, NULL);
+  if (con != NULL)
+  {
+    DRIZZLE_ROW cur;
+    DRIZZLE_RES* res;
+
+    if (drizzle_query(con,"SHOW DATABASES"))
+      do_error(drh, drizzle_errno(con), drizzle_error(con), drizzle_sqlstate(con));
+
+    res= drizzle_store_result(con);
+    if (!res)
     {
-      DRIZZLE_ROW cur;
-      DRIZZLE_RES* res = drizzle_list_dbs(con, NULL);
-      if (!res)
-      {
-        do_error(drh, drizzle_errno(con), drizzle_error(con), drizzle_sqlstate(con));
-      }
-      else
-      {
-	EXTEND(sp, drizzle_num_rows(res));
-	while ((cur = drizzle_fetch_row(res)))
-        {
-	  PUSHs(sv_2mortal((SV*)newSVpv(cur[0], strlen(cur[0]))));
-	}
-	drizzle_free_result(res);
-      }
-      drizzle_close(con);
+      do_error(drh, drizzle_errno(con), drizzle_error(con), drizzle_sqlstate(con));
     }
+    else
+    {
+      EXTEND(sp, drizzle_num_rows(res));
+      while ((cur = drizzle_fetch_row(res)))
+      {
+        PUSHs(sv_2mortal((SV*)newSVpv(cur[0], strlen(cur[0]))));
+      }
+      drizzle_free_result(res);
+    }
+    drizzle_close(con);
+  }
 }
 
 
-void
-_admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,password=NULL)
+void _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,password=NULL)
   SV* drh
   SV* dbh
   char* command
@@ -101,18 +105,11 @@ _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,passwo
   }
 
   if (strEQ(command, "shutdown"))
-#if DRIZZLE_VERSION_ID < 40103
     retval = drizzle_shutdown(con);
-#else
-    retval = drizzle_shutdown(con, SHUTDOWN_DEFAULT);
-#endif
-  else if (strEQ(command, "reload"))
-    retval = drizzle_reload(con);
+  else if (strEQ(command, "refresh"))
+    retval = drizzle_refresh(con, REFRESH_LOG);
   else if (strEQ(command, "createdb"))
   {
-#if DRIZZLE_VERSION_ID < 40000
-    retval = drizzle_create_db(con, dbname);
-#else
     char* buffer = malloc(strlen(dbname)+50);
     if (buffer == NULL)
     {
@@ -126,13 +123,9 @@ _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,passwo
       retval = drizzle_real_query(con, buffer, strlen(buffer));
       free(buffer);
     }
-#endif
   }
   else if (strEQ(command, "dropdb"))
   {
-#if DRIZZLE_VERSION_ID < 40000
-    retval = drizzle_drop_db(con, dbname);
-#else
     char* buffer = malloc(strlen(dbname)+50);
     if (buffer == NULL)
     {
@@ -146,7 +139,6 @@ _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,passwo
       retval = drizzle_real_query(con, buffer, strlen(buffer));
       free(buffer);
     }
-#endif
   }
   else
   {
@@ -197,17 +189,21 @@ _ListDBs(dbh)
   SV*	dbh
   PPCODE:
   D_imp_dbh(dbh);
-  DRIZZLE_RES* res = drizzle_list_dbs(imp_dbh->pdrizzle, NULL);
+  DRIZZLE_RES* res;
   DRIZZLE_ROW cur;
-  if (!res  &&
-      (!drizzle_db_reconnect(dbh)  ||
-       !(res = drizzle_list_dbs(imp_dbh->pdrizzle, NULL))))
-{
+  if (drizzle_query(imp_dbh->pdrizzle,"SHOW DATABASES"))
+  do_error(dbh,
+            drizzle_errno(imp_dbh->pdrizzle),
+            drizzle_error(imp_dbh->pdrizzle),
+            drizzle_sqlstate(imp_dbh->pdrizzle));
+  res= drizzle_store_result(imp_dbh->pdrizzle);
+  if (!res  && (!drizzle_db_reconnect(dbh)))
+  {
   do_error(dbh, drizzle_errno(imp_dbh->pdrizzle),
-           drizzle_error(imp_dbh->pdrizzle), drizzle_sqlstate(imp_dbh->pdrizzle));
-}
-else
-{
+  drizzle_error(imp_dbh->pdrizzle), drizzle_sqlstate(imp_dbh->pdrizzle));
+  }
+  else
+  {
   EXTEND(sp, drizzle_num_rows(res));
   while ((cur = drizzle_fetch_row(res)))
   {
@@ -230,256 +226,21 @@ do(dbh, statement, attr=Nullsv, ...)
   int retval;
   struct imp_sth_ph_st* params= NULL;
   DRIZZLE_RES* result= NULL;
-#if DRIZZLE_VERSION_ID >= SERVER_PREPARE_VERSION
-  STRLEN slen;
-  char            *str_ptr, *statement_ptr, *buffer;
-  int             has_binded;
-  int             col_type= DRIZZLE_TYPE_STRING;
-  int             buffer_is_null= 0;
-  int             buffer_length= slen;
-  int             buffer_type= 0;
-  int             param_type= SQL_VARCHAR;
-  int             use_server_side_prepare= 0;
-  DRIZZLE_STMT      *stmt= NULL;
-  DRIZZLE_BIND      *bind= NULL;
-  imp_sth_phb_t   *fbind= NULL;
-
-  /*
-   * Globaly enabled using of server side prepared statement
-   * for dbh->do() statements. It is possible to force driver
-   * to use server side prepared statement mechanism by adding
-   * 'drizzle_server_prepare' attribute to do() method localy:
-   * $dbh->do($stmt, {drizzle_server_prepared=>1});
-  */
-
-  use_server_side_prepare = imp_dbh->use_server_side_prepare;
-  if (attr)
+  if (items > 3)
   {
-    SV **svp;
-    DBD_ATTRIBS_CHECK("do", dbh, attr);
-    svp = DBD_ATTRIB_GET_SVP(attr, "drizzle_server_prepare", 20);
-
-    use_server_side_prepare = (svp) ?
-      SvTRUE(*svp) : imp_dbh->use_server_side_prepare;
-  }
-  if (dbis->debug >= 2)
-    PerlIO_printf(DBILOGFP,
-                  "drizzle.xs do() use_server_side_prepare %d\n",
-                  use_server_side_prepare);
-
-  hv_store((HV*)SvRV(dbh), "Statement", 9, SvREFCNT_inc(statement), 0);
-
-  if (use_server_side_prepare)
-  {
-    str_ptr= SvPV(statement, slen);
-
-    stmt= drizzle_stmt_init(imp_dbh->pdrizzle);
-
-    if (drizzle_stmt_prepare(stmt, str_ptr, strlen(str_ptr)))
+    /*  Handle binding supplied values to placeholders	   */
+    /*  Assume user has passed the correct number of parameters  */
+    int i;
+    num_params= items-3;
+    Newz(0, params, sizeof(*params)*num_params, struct imp_sth_ph_st);
+    for (i= 0;  i < num_params;  i++)
     {
-      /* For commands that are not supported by server side prepared statement
-         mechanism lets try to pass them through regular API */
-      if (drizzle_stmt_errno(stmt) == ER_UNSUPPORTED_PS)
-      {
-        use_server_side_prepare= 0;
-      }
-      else
-      {
-        do_error(dbh, drizzle_stmt_errno(stmt), drizzle_stmt_error(stmt)
-                 ,drizzle_stmt_sqlstate(stmt));
-        retval=-2;
-      }
-      drizzle_stmt_close(stmt);
-      stmt= NULL;
-    }
-    else
-    {
-      /*
-        * 'items' is the number of arguments passed to XSUB, supplied by xsubpp
-        * compiler, as listed in manpage for perlxs
-      */
-      if (items > 3)
-      {
-        /*
-          Handle binding supplied values to placeholders assume user has
-          passed the correct number of parameters
-        */
-        int i;
-        num_params= items - 3;
-        /*num_params = drizzle_stmt_param_count(stmt);*/
-        Newz(0, params, sizeof(*params)*num_params, struct imp_sth_ph_st);
-        Newz(0, bind, (unsigned int) num_params, DRIZZLE_BIND);
-        Newz(0, fbind, (unsigned int) num_params, imp_sth_phb_t);
-
-        for (i = 0; i < num_params; i++)
-        {
-          int defined= 0;
-          params[i].value= ST(i+3);
-
-          if (params[i].value)
-          {
-            if (SvMAGICAL(params[i].value))
-              mg_get(params[i].value);
-            if (SvOK(params[i].value))
-              defined= 1;
-          }
-          if (defined)
-          {
-            buffer= SvPV(params[i].value, slen);
-            buffer_is_null= 0;
-            buffer_length= slen;
-          }
-          else
-          {
-            buffer= NULL;
-            buffer_is_null= 1;
-            buffer_length= 0;
-          }
-
-          /*
-            if this statement has a result set, field types will be correctly
-            identified. If there is no result set, such as with an INSERT,
-            fields will not be defined, and all buffer_type will default to
-            DRIZZLE_TYPE_VAR_STRING
-          */
-          col_type= (stmt->fields) ? stmt->fields[i].type : DRIZZLE_TYPE_STRING;
-
-          switch (col_type) {
-#if DRIZZLE_VERSION_ID > 50003
-          case DRIZZLE_TYPE_NEWDECIMAL:
-#endif
-          case DRIZZLE_TYPE_DECIMAL:
-            param_type= SQL_DECIMAL;
-            buffer_type= DRIZZLE_TYPE_DOUBLE;
-            break;
-
-          case DRIZZLE_TYPE_DOUBLE:
-            param_type= SQL_DOUBLE;
-            buffer_type= DRIZZLE_TYPE_DOUBLE;
-            break;
-
-          case DRIZZLE_TYPE_FLOAT:
-            buffer_type= DRIZZLE_TYPE_DOUBLE;
-            param_type= SQL_FLOAT;
-            break;
-
-          case DRIZZLE_TYPE_SHORT:
-            buffer_type= DRIZZLE_TYPE_DOUBLE;
-            param_type= SQL_FLOAT;
-            break;
-
-          case DRIZZLE_TYPE_TINY:
-            buffer_type= DRIZZLE_TYPE_DOUBLE;
-            param_type= SQL_FLOAT;
-            break;
-
-          case DRIZZLE_TYPE_LONG:
-            buffer_type= DRIZZLE_TYPE_LONG;
-            param_type= SQL_BIGINT;
-            break;
-
-          case DRIZZLE_TYPE_INT24:
-          case DRIZZLE_TYPE_YEAR:
-            buffer_type= DRIZZLE_TYPE_LONG;
-            param_type= SQL_INTEGER; 
-            break;
-
-          case DRIZZLE_TYPE_LONGLONG:
-            /* perl handles long long as double
-             * so we'll set this to string */
-            buffer_type= DRIZZLE_TYPE_STRING;
-            param_type= SQL_VARCHAR;
-            break;
-
-          case DRIZZLE_TYPE_NEWDATE:
-          case DRIZZLE_TYPE_DATE:
-            buffer_type= DRIZZLE_TYPE_STRING;
-            param_type= SQL_DATE;
-            break;
-
-          case DRIZZLE_TYPE_TIME:
-            buffer_type= DRIZZLE_TYPE_STRING;
-            param_type= SQL_TIME;
-            break;
-
-          case DRIZZLE_TYPE_TIMESTAMP:
-            buffer_type= DRIZZLE_TYPE_STRING;
-            param_type= SQL_TIMESTAMP;
-            break;
-
-          case DRIZZLE_TYPE_VAR_STRING:
-          case DRIZZLE_TYPE_STRING:
-          case DRIZZLE_TYPE_DATETIME:
-            buffer_type= DRIZZLE_TYPE_STRING;
-            param_type= SQL_VARCHAR;
-            break;
-
-          case DRIZZLE_TYPE_BLOB:
-            buffer_type= DRIZZLE_TYPE_BLOB;
-            param_type= SQL_BINARY;
-            break;
-
-          case DRIZZLE_TYPE_GEOMETRY:
-            buffer_type= DRIZZLE_TYPE_BLOB;
-            param_type= SQL_BINARY;
-            break;
-
-
-          default:
-            buffer_type= DRIZZLE_TYPE_STRING;
-            param_type= SQL_VARCHAR;
-            break;
-          }
-
-          bind[i].buffer_type = buffer_type;
-          bind[i].buffer_length= buffer_length;
-          bind[i].buffer= buffer;
-          fbind[i].length= buffer_length;
-          fbind[i].is_null= buffer_is_null;
-          params[i].type= param_type;
-        }
-        has_binded= 0;
-      }
-      retval = drizzle_st_internal_execute41(dbh,
-                                           num_params,
-                                           &result,
-                                           stmt,
-                                           bind,
-                                           &has_binded);
-      if (bind)
-        Safefree(bind);
-      if (fbind)
-        Safefree(fbind);
-
-      if(drizzle_stmt_close(stmt))
-      {
-        fprintf(stderr, "\n failed while closing the statement");
-        fprintf(stderr, "\n %s", drizzle_stmt_error(stmt));
-      }
+      params[i].value= ST(i+3);
+      params[i].type= SQL_VARCHAR;
     }
   }
-
-  if (! use_server_side_prepare)
-  {
-#endif
-    if (items > 3)
-    {
-      /*  Handle binding supplied values to placeholders	   */
-      /*  Assume user has passed the correct number of parameters  */
-      int i;
-      num_params= items-3;
-      Newz(0, params, sizeof(*params)*num_params, struct imp_sth_ph_st);
-      for (i= 0;  i < num_params;  i++)
-      {
-        params[i].value= ST(i+3);
-        params[i].type= SQL_VARCHAR;
-      }
-    }
-    retval = drizzle_st_internal_execute(dbh, statement, attr, num_params,
+  retval = drizzle_st_internal_execute(dbh, statement, attr, num_params,
                                        params, &result, imp_dbh->pdrizzle, 0);
-#if DRIZZLE_VERSION_ID >=SERVER_PREPARE_VERSION
-  }
-#endif
   if (params)
     Safefree(params);
 
@@ -540,7 +301,6 @@ more_results(sth)
     SV *	sth
     CODE:
 {
-#if (DRIZZLE_VERSION_ID >= MULTIPLE_RESULT_SET_VERSION)
   D_imp_sth(sth);
   int retval;
   if (dbd_st_more_results(sth, imp_sth))
@@ -551,7 +311,6 @@ more_results(sth)
   {
     RETVAL=0;
   }
-#endif
 }
     OUTPUT:
       RETVAL
@@ -564,32 +323,6 @@ dataseek(sth, pos)
   CODE:
 {
   D_imp_sth(sth);
-#if (DRIZZLE_VERSION_ID >=SERVER_PREPARE_VERSION)
-  if (imp_sth->use_server_side_prepare)
-  {
-    if (imp_sth->use_drizzle_use_result || 1)
-    {
-      if (imp_sth->result && imp_sth->stmt)
-      {
-        drizzle_stmt_data_seek(imp_sth->stmt, pos);
-        imp_sth->fetch_done=0;
-        RETVAL = 1;
-      }
-      else
-      {
-        RETVAL = 0;
-        do_error(sth, JW_ERR_NOT_ACTIVE, "Statement not active" ,NULL);
-      }
-    }
-    else
-    {
-      RETVAL = 0;
-      do_error(sth, JW_ERR_NOT_ACTIVE, "No result set" ,NULL);
-    }
-  }
-  else
-  {
-#endif
   if (imp_sth->result) {
     drizzle_data_seek(imp_sth->result, pos);
     RETVAL = 1;
@@ -597,9 +330,6 @@ dataseek(sth, pos)
     RETVAL = 0;
     do_error(sth, JW_ERR_NOT_ACTIVE, "Statement not active" ,NULL);
   }
-#if (DRIZZLE_VERSION_ID >=SERVER_PREPARE_VERSION) 
-  }
-#endif
 }
   OUTPUT:
     RETVAL
@@ -679,8 +409,7 @@ dbd_drizzle_get_info(dbh, sql_info_type)
 	case SQL_IDENTIFIER_QUOTE_CHAR:
 	    /*XXX What about a DB started in ANSI mode? */
 	    /* Swiped from MyODBC's get_info.c */
-	    using_322=is_prefix(drizzle_get_server_info(imp_dbh->pdrizzle),"3.22");
-	    retsv = newSVpv(!using_322 ? "`" : " ", 1);
+	    retsv = newSVpv("`", 1);
 	    break;
 	case SQL_MAXIMUM_STATEMENT_LENGTH:
 	    retsv = newSViv(8192);

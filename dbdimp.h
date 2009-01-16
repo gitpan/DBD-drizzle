@@ -23,29 +23,13 @@
 #include <libdrizzle/errmsg.h> 
 
 /*
- * This is the version of MySQL wherer
- * the server will be used to process prepare
- * statements as opposed to emulation in the driver
+  Drizzle team yanked these out of drizzle.h. I'll put them
+  here for now
 */
-#define SQL_STATE_VERSION 40101
-#define WARNING_COUNT_VERSION 40101
-#define FIELD_CHARSETNR_VERSION 40101 /* should equivalent to 4.1.0  */
-#define MULTIPLE_RESULT_SET_VERSION 40102
-#define SERVER_PREPARE_VERSION 40103
-#define LIMIT_PLACEHOLDER_VERSION 50100
-#define GEO_DATATYPE_VERSION 50007
-#define NEW_DATATYPE_VERSION 50003
-#define SSL_VERIFY_VERSION 50023
-#define DRIZZLE_VERSION_5_0 50001
-/* This is to avoid the ugly #ifdef mess in dbdimp.c */
-#if DRIZZLE_VERSION_ID < SQL_STATE_VERSION
-#define drizzle_sqlstate(con) (NULL)
-#endif
+#define IS_PRI_KEY(n) ((n) & PRI_KEY_FLAG)
+#define IS_NOT_NULL(n)  ((n) & NOT_NULL_FLAG)
+#define IS_BLOB(n)  ((n) & BLOB_FLAG)
 
-
-#if DRIZZLE_VERSION_ID < WARNING_COUNT_VERSION
-#define drizzle_warning_count(con) 0
-#endif
 
 /*
  *  The following are return codes passed in $h->err in case of
@@ -102,27 +86,8 @@ enum av_attribs {
 };                         /*  purposes only                                */
 
 
-/*
- *  This is our part of the driver handle. We receive the handle as
- *  an "SV*", say "drh", and receive a pointer to the structure below
- *  by declaring
- *
- *    D_imp_drh(drh);
- *
- *  This declares a variable called "imp_drh" of type
- *  "struct imp_drh_st *".
- */
-typedef struct imp_drh_embedded_st {
-    int state;
-    SV * args;
-    SV * groups;
-} imp_drh_embedded_t;
-
 struct imp_drh_st {
     dbih_drc_t com;         /* MUST be first element in structure   */
-#if defined(DBD_DRIZZLE_EMBEDDED)
-    imp_drh_embedded_t embedded;     /* */
-#endif
 };
 
 
@@ -220,15 +185,6 @@ typedef struct imp_sth_fbind_st {
 struct imp_sth_st {
     dbih_stc_t com;       /* MUST be first element in structure     */
 
-#if (DRIZZLE_VERSION_ID >= SERVER_PREPARE_VERSION)
-    DRIZZLE_STMT       *stmt;
-    DRIZZLE_BIND       *bind;
-    DRIZZLE_BIND       *buffer;
-    imp_sth_phb_t    *fbind;
-    imp_sth_fbh_t    *fbh;
-    int              has_been_bound;
-    int use_server_side_prepare;  /* server side prepare statements? */
-#endif
 
     DRIZZLE_RES* result;       /* result                                 */
     int currow;           /* number of current row                  */
@@ -274,7 +230,6 @@ struct imp_sth_st {
 #define dbd_describe		drizzle_describe
 #define dbd_bind_ph		drizzle_bind_ph
 #define BindParam		drizzle_st_bind_param
-#define mymsql_constant         drizzle_constant
 #define do_warn			drizzle_dr_warn
 #define do_error		drizzle_dr_error
 #define dbd_db_type_info_all    drizzle_db_type_info_all
@@ -299,17 +254,6 @@ uint64_t drizzle_st_internal_execute(SV *,
                                        DRIZZLE *,
                                        int);
 
-#if DRIZZLE_VERSION_ID >= SERVER_PREPARE_VERSION
-uint64_t drizzle_st_internal_execute41(SV *,
-                                         int,
-                                         DRIZZLE_RES **,
-                                         DRIZZLE_STMT *,
-                                         DRIZZLE_BIND *,
-                                         int *);
-
-
-int drizzle_st_clean_cursor(SV*, imp_sth_t*);
-#endif
 
 
 AV* dbd_db_type_info_all (SV* dbh, imp_dbh_t* imp_dbh);

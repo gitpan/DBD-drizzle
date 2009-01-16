@@ -9,7 +9,7 @@ use DynaLoader();
 use Carp ();
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.002';
+$VERSION = '0.003';
 
 bootstrap DBD::drizzle $VERSION;
 
@@ -137,7 +137,6 @@ sub connect {
       return undef;
     }
 
-    # Call msqlConnect func in mSQL.xs file
     # and populate internal handle data.
     DBD::drizzle::db::_login($this, $dsn, $username, $password)
 	  or $this = undef;
