@@ -9,7 +9,7 @@ my $count = 0;
 my $query = "SELECT 1 FROM DUAL";
 
 my $dbh = DBI->connect (
-    "dbi:mysql:database=test:host=localhost;mysql_emulated_prepare=0",
+    "dbi:drizzle:database=test:host=localhost",
     "root", "",
     { RaiseError => 1, PrintError => 0 },
     );

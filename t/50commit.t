@@ -56,7 +56,7 @@ if ($have_transactions) {
   ok $dbh->do("DROP TABLE IF EXISTS $table"), "drop table if exists $table";
   my $create =<<EOT;
 CREATE TABLE $table (
-    id INT(4) NOT NULL default 0,
+    id INT NOT NULL default 0,
     name VARCHAR(64) NOT NULL default ''
 ) ENGINE=$engine
 EOT
@@ -110,12 +110,12 @@ EOT
 
 }
 else {
-  plan tests => 11; 
+  plan tests => 13; 
 
   ok $dbh->do("DROP TABLE IF EXISTS $table"), "drop table if exists $table";
   my $create =<<EOT;
   CREATE TABLE $table (
-      id INT(4) NOT NULL default 0,
+      id INT NOT NULL default 0,
       name VARCHAR(64) NOT NULL default ''
       ) ENGINE=$engine
 EOT

@@ -17,13 +17,13 @@ eval {$dbh= DBI->connect($test_dsn, $test_user, $test_password,
 if ($@) {
     plan skip_all => "ERROR: $DBI::errstr. Can't continue test";
 }
-plan tests => 41;
+plan tests => 39;
 
 ok ($dbh->do("DROP TABLE IF EXISTS $table"));
 
 my $create = <<EOT;
 CREATE TABLE $table (
-        id int(4) NOT NULL default 0,
+        id int NOT NULL default 0,
         name varchar(64) default ''
         )
 EOT
@@ -66,11 +66,11 @@ ok ($sth->execute(-1, "abc"));
 
 ok ($dbh->do("INSERT INTO $table VALUES (6, '?')"));
 
-ok ($dbh->do('SET @old_sql_mode = @@sql_mode, @@sql_mode = \'\''));
+#ok ($dbh->do('SET @old_sql_mode = @@sql_mode, @@sql_mode = \'\''));
 
 ok ($dbh->do("INSERT INTO $table VALUES (7, \"?\")"));
 
-ok ($dbh->do('SET @@sql_mode = @old_sql_mode'));
+#ok ($dbh->do('SET @@sql_mode = @old_sql_mode'));
 
 ok ($sth = $dbh->prepare("SELECT * FROM $table ORDER BY id"));
 

@@ -2,6 +2,7 @@
  *  DBD::drizzle - DBI driver for the Drizzle database
  *
  *  Copyright (c) 2008       Patrick Galbraith
+ *  Copyright 2009 Clint Byrum
  *
  *  Based on DBD::Oracle; DBD::Oracle is
  *
@@ -16,19 +17,17 @@
  *  Header files we use
  */
 #include <DBIXS.h>  /* installed by the DBI module                        */
-#include <libdrizzle/drizzle.h>
-#include <drizzled/common.h>  
-#include <drizzled/error.h>  
-
-#include <libdrizzle/errmsg.h> 
+#include <libdrizzle/drizzle_client.h>
 
 /*
   Drizzle team yanked these out of drizzle.h. I'll put them
   here for now
 */
-#define IS_PRI_KEY(n) ((n) & PRI_KEY_FLAG)
-#define IS_NOT_NULL(n)  ((n) & NOT_NULL_FLAG)
-#define IS_BLOB(n)  ((n) & BLOB_FLAG)
+#define IS_PRI_KEY(n) ((n) & DRIZZLE_COLUMN_FLAGS_PRI_KEY)
+#define IS_NOT_NULL(n)  ((n) & DRIZZLE_COLUMN_FLAGS_NOT_NULL)
+#define IS_BLOB(n)  ((n) & DRIZZLE_COLUMN_FLAGS_BLOB)
+#define IS_AUTO_INCREMENT(n)  ((n) & DRIZZLE_COLUMN_FLAGS_AUTO_INCREMENT)
+#define IS_KEY  ((n) & DRIZZLE_COLUMN_FLAGS_KEY)
 
 
 /*
@@ -104,24 +103,21 @@ struct imp_drh_st {
 struct imp_dbh_st {
     dbih_dbc_t com;         /*  MUST be first element in structure   */
 
-    DRIZZLE *pdrizzle;
-    int has_transactions;   /*  boolean indicating support for
-			     *  transactions, currently always
-			     *  TRUE for MySQL and always FALSE
-			     *  for mSQL.
-			     */
+    drizzle_st _drizzle;
+    drizzle_st * drizzle; 
+
+    uint32_t con_count;
+    drizzle_con_st *con; /* TODO: replace with list for drizzle_con_ready */
     bool auto_reconnect;
     struct {
 	    unsigned int auto_reconnects_ok;
 	    unsigned int auto_reconnects_failed;
     } stats;
     unsigned short int  bind_type_guessing;
-    int use_drizzle_use_result; /* TRUE if execute should use
-                               * drizzle_use_result rather than
-                               * drizzle_store_result
-                               */
+    int unbuffered_result;
     int use_server_side_prepare;
     int has_autodetect_prepare;
+    uint64_t insert_id;
     bool enable_utf8;
 };
 
@@ -185,22 +181,19 @@ typedef struct imp_sth_fbind_st {
 struct imp_sth_st {
     dbih_stc_t com;       /* MUST be first element in structure     */
 
+    drizzle_result_st * result;  /* result                                 */
+    drizzle_row_t row;           /* sometimes we have to read a row early  */
+    int currow;                  /* number of current row                  */
+    int fetch_done;              /* mark that fetch done                   */
+    uint64_t row_num;            /* total number of rows                   */
 
-    DRIZZLE_RES* result;       /* result                                 */
-    int currow;           /* number of current row                  */
-    int fetch_done;       /* mark that fetch done                   */
-    uint64_t row_num;         /* total number of rows                   */
-
-    int   done_desc;      /* have we described this sth yet ?	    */
-    long  long_buflen;    /* length for long/longraw (if >0)	    */
-    bool  long_trunc_ok;  /* is truncating a long an error	    */
-    uint64_t insertid; /* ID of auto insert                      */
-    int   warning_count;  /* Number of warnings after execute()     */
-    imp_sth_ph_t* params; /* Pointer to parameter array             */
-    AV* av_attr[AV_ATTRIB_LAST];/*  For caching array attributes        */
-    int   use_drizzle_use_result;  /*  TRUE if execute should use     */
-                          /* drizzle_use_result rather than           */
-                          /* drizzle_store_result */
+    int   done_desc;             /* have we described this sth yet ?	    */
+    long  long_buflen;           /* length for long/longraw (if >0)	    */
+    bool  long_trunc_ok;         /* is truncating a long an error	    */
+    int   warning_count;         /* Number of warnings after execute()     */
+    imp_sth_ph_t* params;        /* Pointer to parameter array             */
+    AV* av_attr[AV_ATTRIB_LAST]; /* For caching array attributes        */
+    int   unbuffered_result;     /* TRUE if we should avoid using libdrizzle buffering */
 };
 
 
@@ -209,7 +202,7 @@ struct imp_sth_st {
  *
  * These defines avoid name clashes for multiple statically linked DBD's	*/
 #define dbd_init		drizzle_dr_init
-#define dbd_db_login		drizzle_db_login
+#define dbd_db_login6		drizzle_db_login
 #define dbd_db_do		drizzle_db_do
 #define dbd_db_commit		drizzle_db_commit
 #define dbd_db_rollback		drizzle_db_rollback
@@ -240,9 +233,10 @@ struct imp_sth_st {
 #endif
 
 #include <dbd_xsh.h>
+void dbd_drizzle_dr_driver(SV *drh);
 void    do_error (SV* h, int rc, const char *what, const char *sqlstate);
 
-SV	*dbd_db_fieldlist (DRIZZLE_RES* res);
+SV	*dbd_db_fieldlist (drizzle_result_st * res);
 
 void    dbd_preparse (imp_sth_t *imp_sth, SV *statement);
 uint64_t drizzle_st_internal_execute(SV *,
@@ -250,18 +244,19 @@ uint64_t drizzle_st_internal_execute(SV *,
                                        SV *,
                                        int,
                                        imp_sth_ph_t *,
-                                       DRIZZLE_RES **,
-                                       DRIZZLE *,
+                                       drizzle_result_st **,
+                                       drizzle_con_st *,
                                        int);
 
 
 
 AV* dbd_db_type_info_all (SV* dbh, imp_dbh_t* imp_dbh);
 SV* dbd_db_quote(SV*, SV*, SV*);
-extern DRIZZLE *drizzle_dr_connect(
-                SV*, DRIZZLE*, char*, char*, char*, char*, char*,
+extern int drizzle_dr_connect(
+                SV*, drizzle_con_st *, char*, char*, char*, char*, char*,
 			       char*, imp_dbh_t*);
 
 extern int drizzle_db_reconnect(SV*);
 int drizzle_st_free_result_sets (SV * sth, imp_sth_t * imp_sth);
 static char *safe_hv_fetch(HV *hv, const char *name, int name_length);
+int parse_number(char *string, STRLEN len, char **end);

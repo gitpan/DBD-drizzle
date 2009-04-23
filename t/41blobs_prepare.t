@@ -49,7 +49,7 @@ sub ShowBlob($) {
 
 my $create = <<EOT;
 CREATE TABLE $table (
-  id int(4),
+  id int,
   name text)
 EOT
 

@@ -13,8 +13,7 @@ GetOptions (
     );
 
 
-my $dsn = "DBI:mysql:database=test;host=localhost";
-$dsn .= ";mysql_server_prepare=1" if $opt_prepared;
+my $dsn = "DBI:drizzle:database=test;host=localhost";
 
 my $dbh = DBI->connect( $dsn, 'root', '', { RaiseError => 1 } )
 or die $DBI::errstr;

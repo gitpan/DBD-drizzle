@@ -6,7 +6,7 @@ use Data::Dumper;
 
 # Connect to database
 my $dbh = DBI->connect
-('DBI:mysql:database=test;host=localhost:mysql_server_prepare=1',
+('DBI:drizzle:database=test;host=localhost',
  'myUser', 'myPassword', {RaiseError => 1})
 or die "$0: Can not connect to database: " . $DBI::errstr;
 

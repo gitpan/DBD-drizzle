@@ -42,8 +42,8 @@ ok $dbh->do("DROP TABLE IF EXISTS $table"), "Drop table if exists $table";
 
 my $create = <<EOT;
 CREATE TABLE $table (
-    id INT(3) NOT NULL DEFAULT 0,
-    name BLOB ) DEFAULT CHARSET=utf8
+    id INT NOT NULL DEFAULT 0,
+    name BLOB )
 EOT
 
 ok ($dbh->do($create));

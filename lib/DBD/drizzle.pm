@@ -9,7 +9,7 @@ use DynaLoader();
 use Carp ();
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.003';
+$VERSION = '0.100';
 
 bootstrap DBD::drizzle $VERSION;
 
@@ -254,9 +254,6 @@ sub _SelectDB ($$) {
 
 sub table_info ($) {
   my ($dbh, $catalog, $schema, $table, $type, $attr) = @_;
-  $dbh->{drizzle_server_prepare}||= 0;
-  my $drizzle_server_prepare_save= $dbh->{drizzle_server_prepare};
-  $dbh->{drizzle_server_prepare}= 0;
   my @names = qw(TABLE_CAT TABLE_SCHEM TABLE_NAME TABLE_TYPE REMARKS);
   my @rows;
 
@@ -275,13 +272,9 @@ sub table_info ($) {
       (!defined($catalog) || $catalog eq "") &&
       (!defined($table) || $table eq ""))
   {
-    my $sth = $dbh->prepare("SHOW DATABASES")
-      or ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save && 
-          return undef);
+    my $sth = $dbh->prepare("SHOW DATABASES") or return undef;
 
-    $sth->execute()
-      or ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save && 
-        return DBI::set_err($dbh, $sth->err(), $sth->errstr()));
+    $sth->execute() or return DBI::set_err($dbh, $sth->err(), $sth->errstr());
 
     while (my $ref = $sth->fetchrow_arrayref())
     {
@@ -315,13 +308,8 @@ sub table_info ($) {
     # a list of schemas, since it may be a wildcard.
     if (defined $schema && $schema ne "")
     {
-      my $sth = $dbh->prepare("SHOW DATABASES LIKE " .
-          $dbh->quote($schema))
-        or ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save && 
-        return undef);
-      $sth->execute()
-        or ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save && 
-        return DBI::set_err($dbh, $sth->err(), $sth->errstr()));
+      my $sth = $dbh->prepare("SHOW DATABASES LIKE " .  $dbh->quote($schema)) or return undef;
+      $sth->execute() or return DBI::set_err($dbh, $sth->err(), $sth->errstr());
 
       while (my $ref = $sth->fetchrow_arrayref())
       {
@@ -350,13 +338,9 @@ sub table_info ($) {
     {
       my $sth = $dbh->prepare("SHOW /*!50002 FULL*/ TABLES FROM " .
           $dbh->quote_identifier($database) .
-          " LIKE " .  $dbh->quote($table))
-          or ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save && 
-          return undef);
+          " LIKE " .  $dbh->quote($table)) or return undef;
 
-      $sth->execute() or
-          ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save &&
-          return DBI::set_err($dbh, $sth->err(), $sth->errstr()));
+      $sth->execute() or return DBI::set_err($dbh, $sth->err(), $sth->errstr());
 
       while (my $ref = $sth->fetchrow_arrayref())
       {
@@ -374,11 +358,8 @@ sub table_info ($) {
     rows          => \@rows,
     NUM_OF_FIELDS => scalar @names,
     NAME          => \@names,
-  }) 
-    or ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save && 
-      return $dbh->DBI::set_err($sponge->err(), $sponge->errstr()));
+  }) or return $dbh->DBI::set_err($sponge->err(), $sponge->errstr());
 
-  $dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save;
   return $sth;
 }
 
@@ -393,9 +374,6 @@ sub _ListTables {
 
 sub column_info {
   my ($dbh, $catalog, $schema, $table, $column) = @_;
-  $dbh->{drizzle_server_prepare}||= 0;
-  my $drizzle_server_prepare_save= $dbh->{drizzle_server_prepare};
-  $dbh->{drizzle_server_prepare}= 0;
 
   # ODBC allows a NULL to mean all columns, so we'll accept undef
   $column = '%' unless defined $column;
@@ -431,7 +409,6 @@ sub column_info {
     # existing per DBI spec
     if ($err != $ER_NO_SUCH_TABLE)
     {
-      $dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save;
       return undef;
     }
     $dbh->set_err(undef,undef);
@@ -565,27 +542,22 @@ sub column_info {
     #warn Dumper($info);
   }
 
-  my $sponge = DBI->connect("DBI:Sponge:", '','')
-    or (  $dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save &&
-          return $dbh->DBI::set_err($DBI::err, "DBI::Sponge: $DBI::errstr"));
+  my $sponge = DBI->connect("DBI:Sponge:", '','') or 
+          return $dbh->DBI::set_err($DBI::err, "DBI::Sponge: $DBI::errstr");
 
   my $sth = $sponge->prepare("column_info $table", {
       rows          => [ map { [ @{$_}{@names} ] } values %col_info ],
       NUM_OF_FIELDS => scalar @names,
       NAME          => \@names,
       }) or
-  return ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save &&
-          $dbh->DBI::set_err($sponge->err(), $sponge->errstr()));
+  return ( $dbh->DBI::set_err($sponge->err(), $sponge->errstr()));
 
-  $dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save;
   return $sth;
 }
 
 
 sub primary_key_info {
   my ($dbh, $catalog, $schema, $table) = @_;
-  $dbh->{drizzle_server_prepare}||= 0;
-  my $drizzle_server_prepare_save= $dbh->{drizzle_server_prepare};
 
   my $table_id = $dbh->quote_identifier($catalog, $schema, $table);
 
@@ -611,19 +583,13 @@ sub primary_key_info {
   }
 
   my $sponge = DBI->connect("DBI:Sponge:", '','')
-    or 
-     ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save &&
-      return $dbh->DBI::set_err($DBI::err, "DBI::Sponge: $DBI::errstr"));
+    or return $dbh->DBI::set_err($DBI::err, "DBI::Sponge: $DBI::errstr");
 
   my $sth= $sponge->prepare("primary_key_info $table", {
       rows          => [ map { [ @{$_}{@names} ] } values %col_info ],
       NUM_OF_FIELDS => scalar @names,
       NAME          => \@names,
-      }) or 
-       ($dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save &&
-        return $dbh->DBI::set_err($sponge->err(), $sponge->errstr()));
-
-  $dbh->{drizzle_server_prepare}= $drizzle_server_prepare_save;
+      }) or return $dbh->DBI::set_err($sponge->err(), $sponge->errstr());
 
   return $sth;
 }
@@ -1027,43 +993,11 @@ in the MySQL client library by default. If your DSN contains the option
 this option is *ineffective* if the server has also been configured to
 disallow LOCAL.)
 
-=item drizzle_multi_statements
-
-As of MySQL 4.1, support for multiple statements seperated by a semicolon
-(;) may be enabled by using this option. Enabling this option may cause
-problems if server-side prepared statements are also enabled.
+Need to find out about this for drizzle
 
 =item Prepared statement support (server side prepare)
 
-As of 3.0002_1, server side prepare statements were on by default (if your
-server was >= 4.1.3). As of 3.0009, they were off by default again due to 
-issues with the prepared statement API (all other drizzle connectors are
-set this way until C API issues are resolved). The requirement to use
-prepared statements still remains that you have a server >= 4.1.3
-
-To use server side prepared statements, all you need to do is set the variable 
-drizzle_server_prepare in the connect:
-
-$dbh = DBI->connect(
-                    "DBI:drizzle:database=test;host=localhost;drizzle_server_prepare=1",
-                    "",
-                    "",
-                    { RaiseError => 1, AutoCommit => 1 }
-                    );
-
-* Note: delimiter for this param is ';'
-
-There are many benefits to using server side prepare statements, mostly if you are 
-performing many inserts because of that fact that a single statement is prepared 
-to accept multiple insert values.
-
-To make sure that the 'make test' step tests whether server prepare works, you just
-need to export the env variable DRIZZLE_SERVER_PREPARE:
-
-export DRIZZLE_SERVER_PREPARE=1
-
-
-
+Drizzle does not support server side prepared statements.
 
 =head2 Private MetaData Methods
 

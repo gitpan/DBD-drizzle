@@ -8,7 +8,7 @@ foreach (@{ $DBI::EXPORT_TAGS{sql_types} }) {
     $map{&{"DBI::$_"}} = $_;
 }
 
-my $dbh = DBI->connect('DBI:mysql:test;mysql_emulated_prepare=1', 'root');
+my $dbh = DBI->connect('DBI:drizzle:test', 'root');
 my $table = 'mysql5bug';
 my $drop   = "DROP TABLE IF EXISTS $table";
 my $create = "CREATE TABLE $table (value decimal(5,2));";

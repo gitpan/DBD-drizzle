@@ -17,7 +17,7 @@ eval {$dbh= DBI->connect($test_dsn, $test_user, $test_password,
                       { RaiseError            => 1,
                         PrintError            => 1,
                         AutoCommit            => 0,
-                        mysql_server_prepare  => 0 });};
+                        drizzle_server_prepare  => 0 });};
 
 if ($@) {
     plan skip_all => "ERROR: $DBI::errstr. Can't continue test";
@@ -85,7 +85,7 @@ SKIP: {
 #
 # table_info() tests
 #
-# These tests assume that no other tables name like 't_dbd_mysql_%' exist on
+# These tests assume that no other tables name like 't_dbd_drizzle_%' exist on
 # the server we are using for testing.
 #
 SKIP: {
@@ -101,29 +101,29 @@ SKIP: {
   $sth = $dbh->table_info(undef, undef, undef, "%");
   ok(scalar @{$sth->fetchall_arrayref()} > 0, "Some table types expected");
 
-  ok($dbh->do(qq{DROP TABLE IF EXISTS t_dbd_mysql_t1, t_dbd_mysql_t11,
-                                      t_dbd_mysql_t2, t_dbd_mysqlat2,
-                                      `t_dbd_mysql_a'b`,
-                                      `t_dbd_mysql_a``b`}),
+  ok($dbh->do(qq{DROP TABLE IF EXISTS t_dbd_drizzle_t1, t_dbd_drizzle_t11,
+                                      t_dbd_drizzle_t2, t_dbd_drizzleat2,
+                                      `t_dbd_drizzle_a'b`,
+                                      `t_dbd_drizzle_a``b`}),
               "cleaning up");
-  ok($dbh->do(qq{CREATE TABLE t_dbd_mysql_t1 (a INT)}) and
-     $dbh->do(qq{CREATE TABLE t_dbd_mysql_t11 (a INT)}) and
-     $dbh->do(qq{CREATE TABLE t_dbd_mysql_t2 (a INT)}) and
-     $dbh->do(qq{CREATE TABLE t_dbd_mysqlat2 (a INT)}) and
-     $dbh->do(qq{CREATE TABLE `t_dbd_mysql_a'b` (a INT)}) and
-     $dbh->do(qq{CREATE TABLE `t_dbd_mysql_a``b` (a INT)}),
+  ok($dbh->do(qq{CREATE TABLE t_dbd_drizzle_t1 (a INT)}) and
+     $dbh->do(qq{CREATE TABLE t_dbd_drizzle_t11 (a INT)}) and
+     $dbh->do(qq{CREATE TABLE t_dbd_drizzle_t2 (a INT)}) and
+     $dbh->do(qq{CREATE TABLE t_dbd_drizzleat2 (a INT)}) and
+     $dbh->do(qq{CREATE TABLE `t_dbd_drizzle_a'b` (a INT)}) and
+     $dbh->do(qq{CREATE TABLE `t_dbd_drizzle_a``b` (a INT)}),
      "creating test tables");
 
   # $base is our base table name, with the _ escaped to avoid extra matches
   my $esc = $dbh->get_info(14); # SQL_SEARCH_PATTERN_ESCAPE
-  (my $base = "t_dbd_mysql_") =~ s/([_%])/$esc$1/g;
+  (my $base = "t_dbd_drizzle_") =~ s/([_%])/$esc$1/g;
 
   # Test fetching info on a single table
   $sth = $dbh->table_info(undef, undef, $base . "t1", undef);
   my $info = $sth->fetchall_arrayref({});
 
   is($info->[0]->{TABLE_CAT}, undef);
-  is($info->[0]->{TABLE_NAME}, "t_dbd_mysql_t1");
+  is($info->[0]->{TABLE_NAME}, "t_dbd_drizzle_t1");
   is($info->[0]->{TABLE_TYPE}, "TABLE");
   is(scalar @$info, 1, "one row expected");
 
@@ -132,10 +132,10 @@ SKIP: {
   $info = $sth->fetchall_arrayref({});
 
   is($info->[0]->{TABLE_CAT}, undef);
-  is($info->[0]->{TABLE_NAME}, "t_dbd_mysql_t1");
+  is($info->[0]->{TABLE_NAME}, "t_dbd_drizzle_t1");
   is($info->[0]->{TABLE_TYPE}, "TABLE");
   is($info->[1]->{TABLE_CAT}, undef);
-  is($info->[1]->{TABLE_NAME}, "t_dbd_mysql_t11");
+  is($info->[1]->{TABLE_NAME}, "t_dbd_drizzle_t11");
   is($info->[1]->{TABLE_TYPE}, "TABLE");
   is(scalar @$info, 2, "two rows expected");
 
@@ -144,7 +144,7 @@ SKIP: {
   $info = $sth->fetchall_arrayref({});
 
   is($info->[0]->{TABLE_CAT}, undef);
-  is($info->[0]->{TABLE_NAME}, "t_dbd_mysql_t2");
+  is($info->[0]->{TABLE_NAME}, "t_dbd_drizzle_t2");
   is($info->[0]->{TABLE_TYPE}, "TABLE");
   is(scalar @$info, 1, "only one table expected");
 
@@ -153,7 +153,7 @@ SKIP: {
   $info = $sth->fetchall_arrayref({});
 
   is($info->[0]->{TABLE_CAT}, undef);
-  is($info->[0]->{TABLE_NAME}, "t_dbd_mysql_a`b");
+  is($info->[0]->{TABLE_NAME}, "t_dbd_drizzle_a`b");
   is($info->[0]->{TABLE_TYPE}, "TABLE");
   is(scalar @$info, 1, "only one table expected");
 
@@ -162,12 +162,12 @@ SKIP: {
   $info = $sth->fetchall_arrayref({});
 
   is($info->[0]->{TABLE_CAT}, undef);
-  is($info->[0]->{TABLE_NAME}, "t_dbd_mysql_a'b");
+  is($info->[0]->{TABLE_NAME}, "t_dbd_drizzle_a'b");
   is($info->[0]->{TABLE_TYPE}, "TABLE");
   is(scalar @$info, 1, "only one table expected");
 
   # Test fetching our tables with a wildcard schema
-  # NOTE: the performance of this could be bad if the mysql user we
+  # NOTE: the performance of this could be bad if the drizzle user we
   # are connecting as can see lots of databases.
   $sth = $dbh->table_info(undef, "%", $base . "%", undef);
   $info = $sth->fetchall_arrayref({});
@@ -176,15 +176,15 @@ SKIP: {
   
   # Check that tables() finds and escapes the tables named with quotes
   $info = [ $dbh->tables(undef, undef, $base . 'a%') ];
-  like($info->[0], qr/\.`t_dbd_mysql_a'b`$/, "table with single quote");
-  like($info->[1], qr/\.`t_dbd_mysql_a``b`$/,  "table with back quote");
+  like($info->[0], qr/\.`t_dbd_drizzle_a'b`$/, "table with single quote");
+  like($info->[1], qr/\.`t_dbd_drizzle_a``b`$/,  "table with back quote");
   is(scalar @$info, 2, "two tables expected");
 
   # Clean up
-  ok($dbh->do(qq{DROP TABLE IF EXISTS t_dbd_mysql_t1, t_dbd_mysql_t11,
-                                      t_dbd_mysql_t2, t_dbd_mysqlat2,
-                                      `t_dbd_mysql_a'b`,
-                                      `t_dbd_mysql_a``b`}),
+  ok($dbh->do(qq{DROP TABLE IF EXISTS t_dbd_drizzle_t1, t_dbd_drizzle_t11,
+                                      t_dbd_drizzle_t2, t_dbd_drizzleat2,
+                                      `t_dbd_drizzle_a'b`,
+                                      `t_dbd_drizzle_a``b`}),
               "cleaning up");
 };
 
@@ -258,15 +258,15 @@ SKIP: {
                                   )}), "creating table");
 
   #
-  # Bug #26603: (one part) add mysql_is_autoincrement
+  # Bug #26603: (one part) add drizzle_is_autoincrement
   #
   $sth= $dbh->column_info(undef, undef, "t1", 'a');
   my ($info)= $sth->fetchall_arrayref({});
-  is($info->[0]->{mysql_is_auto_increment}, 1);
+  is($info->[0]->{drizzle_is_auto_increment}, 1);
 
   $sth= $dbh->column_info(undef, undef, "t1", 'b');
   ($info)= $sth->fetchall_arrayref({});
-  is($info->[0]->{mysql_is_auto_increment}, 0);
+  is($info->[0]->{drizzle_is_auto_increment}, 0);
 
   #
   # Test that wildcards and odd names are handled correctly

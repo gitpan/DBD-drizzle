@@ -25,7 +25,7 @@ ok(defined $dbh, "Connected to database");
 
 SKIP: {
 skip "New Data types not supported by server", 19 
-  if $dbh->get_info($GetInfoType{SQL_DBMS_VER}) lt "5.0";
+  if $dbh->get_info($GetInfoType{SQL_DBMS_VER}) lt "2009.03.942";
 
 ok($dbh->do(qq{DROP TABLE IF EXISTS t1}), "making slate clean");
 
@@ -61,7 +61,7 @@ ok($dbh->do(qq{DROP TABLE t1}), "cleaning up");
 #
 # [rt.cpan.org #19212] Mysql Unsigned Integer Fields
 #
-ok($dbh->do(qq{CREATE TABLE t1 (num INT UNSIGNED)}), "creating table");
+ok($dbh->do(qq{CREATE TABLE t1 (num BIGINT )}), "creating table");
 ok($dbh->do(qq{INSERT INTO t1 VALUES (0),(4294967295)}), "loading data");
 
 is_deeply($dbh->selectall_arrayref("SELECT * FROM t1"),

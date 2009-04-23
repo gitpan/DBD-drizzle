@@ -37,7 +37,7 @@ ok $dbh->do("DROP TABLE IF EXISTS $table"), "drop table if exists $table";
 
 $create = <<EOC;
 CREATE TABLE $table (
-    id INT(4) NOT NULL,
+    id INT NOT NULL,
     name VARCHAR(64),
     key id (id)
     )
@@ -49,9 +49,7 @@ ok $dbh->table_info(undef,undef,$table), "table info for $table";
 
 ok $dbh->column_info(undef,undef,$table,'%'), "column_info for $table";
 
-$sth= $dbh->column_info(undef,undef,"this_does_not_exist",'%');
-
-ok $sth, "\$sth defined";
+ok $sth= $dbh->column_info(undef,undef,"this_does_not_exist",'%');
 
 ok !$sth->err(), "not error";
 

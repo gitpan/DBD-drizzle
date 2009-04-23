@@ -1,12 +1,16 @@
 /*
+  vim:ts=2 sts=2 sw=2:et ai:
+
    Copyright (c) 2008   Patrick Galbraith
+   Copyright (c) 2009   Clint Byrum <clint@fewbar.com>
 
    You may distribute under the terms of either the GNU General Public
    License or the Artistic License, as specified in the Perl README file.
 
 */
 
-
+#include <stdlib.h>
+#include <libdrizzle/drizzle_client.h>
 #include "dbdimp.h"
 #include "constants.h"
 
@@ -29,7 +33,6 @@ constant(name, arg)
   OUTPUT:
     RETVAL
 
-
 MODULE = DBD::drizzle	PACKAGE = DBD::drizzle::dr
 
 void
@@ -41,32 +44,42 @@ _ListDBs(drh, host=NULL, port=NULL, user=NULL, password=NULL)
     char *      password
   PPCODE:
 {
-  DRIZZLE drizzle;
-  DRIZZLE* con= drizzle_dr_connect(drh, &drizzle, NULL, host, port, user, password,
-                                   NULL, NULL);
-  if (con != NULL)
+  drizzle_return_t ret;
+  drizzle_st drizzle;
+  drizzle_con_st con;
+
+  (void)drizzle_create(&drizzle);
+  (void)drizzle_con_create(&drizzle, &con);
+
+  (void)drizzle_con_add_tcp(&drizzle, &con, host, atoi(port), user, password, NULL, DRIZZLE_CON_NONE);
+  ret = drizzle_con_connect(&con);
+
+  if (ret != DRIZZLE_RETURN_OK)
   {
-    DRIZZLE_ROW cur;
-    DRIZZLE_RES* res;
+    do_error(drh, drizzle_errno(&drizzle), drizzle_error(&drizzle), NULL);
+  }
+  else
+  {
+    drizzle_row_t cur;
+    drizzle_result_st res;
 
-    if (drizzle_query(con,"SHOW DATABASES"))
-      do_error(drh, drizzle_errno(con), drizzle_error(con), drizzle_sqlstate(con));
+    (void) drizzle_result_create(&con, &res);
 
-    res= drizzle_store_result(con);
-    if (!res)
-    {
-      do_error(drh, drizzle_errno(con), drizzle_error(con), drizzle_sqlstate(con));
+    (void) drizzle_query_str(&con, &res, "SHOW DATABASES", &ret);
+    if(ret != DRIZZLE_RETURN_OK) {
+      do_error(drh, drizzle_result_error_code(&res), drizzle_result_error(&res), drizzle_result_sqlstate(&res));
     }
     else
     {
-      EXTEND(sp, drizzle_num_rows(res));
-      while ((cur = drizzle_fetch_row(res)))
+      ret = drizzle_result_buffer(&res);
+      EXTEND(sp, drizzle_result_row_count(&res));
+      while ((cur = drizzle_row_next(&res)))
       {
         PUSHs(sv_2mortal((SV*)newSVpv(cur[0], strlen(cur[0]))));
       }
-      drizzle_free_result(res);
+      drizzle_result_free(&res);
     }
-    drizzle_close(con);
+    drizzle_con_close(&con);
   }
 }
 
@@ -82,77 +95,68 @@ void _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,p
   char* password
   PPCODE:
 {
-  DRIZZLE drizzle;
-  int retval;
-  DRIZZLE* con;
+  drizzle_return_t retval;
+  drizzle_st *drizzle;
+  drizzle_con_st *con = NULL;
 
   /*
    *  Connect to the database, if required.
  */
+
   if (SvOK(dbh)) {
     D_imp_dbh(dbh);
-    con= imp_dbh->pdrizzle;
+    drizzle = imp_dbh->drizzle;
+    con = imp_dbh->con;
   }
   else
   {
-    con= drizzle_dr_connect(drh, &drizzle, NULL, host, port, user,  password, NULL, NULL);
+    if (drizzle == NULL)
+    {
+      do_error(drh, -1, "error allocating memory for core drizzle structure", NULL);
+      XSRETURN_NO;
+    }
+    con = drizzle_con_add_tcp(drizzle, con, host, atoi(port), user, password, NULL, DRIZZLE_CON_NONE);
     if (con == NULL)
     {
-      do_error(drh, drizzle_errno(&drizzle), drizzle_error(&drizzle),
-               drizzle_sqlstate(&drizzle));
+      do_error(drh, drizzle_errno(drizzle), drizzle_error(drizzle), NULL);
+      XSRETURN_NO;
+    }
+    retval = drizzle_con_connect(con);
+    if (retval != DRIZZLE_RETURN_OK)
+    {
+      do_error(drh, drizzle_con_errno(con), drizzle_con_error(con), NULL);
       XSRETURN_NO;
     }
   }
 
+  drizzle_result_st res;
+  (void) drizzle_result_create(con, &res);
+
   if (strEQ(command, "shutdown"))
-    retval = drizzle_shutdown(con);
+    (void) drizzle_shutdown(con, &res, DRIZZLE_SHUTDOWN_DEFAULT, &retval);
   else if (strEQ(command, "refresh"))
-    retval = drizzle_refresh(con, REFRESH_LOG);
+    (void) drizzle_refresh(con, &res, DRIZZLE_REFRESH_LOG, &retval);
   else if (strEQ(command, "createdb"))
   {
-    char* buffer = malloc(strlen(dbname)+50);
-    if (buffer == NULL)
-    {
-      do_error(drh, JW_ERR_MEM, "Out of memory" ,NULL);
-      XSRETURN_NO;
-    }
-    else
-    {
-      strcpy(buffer, "CREATE DATABASE ");
-      strcat(buffer, dbname);
-      retval = drizzle_real_query(con, buffer, strlen(buffer));
-      free(buffer);
-    }
+      (void) drizzle_command_write(con, &res, DRIZZLE_COMMAND_CREATE_DB, (uint8_t *)dbname, strlen(dbname), strlen(dbname), &retval);
   }
   else if (strEQ(command, "dropdb"))
   {
-    char* buffer = malloc(strlen(dbname)+50);
-    if (buffer == NULL)
-    {
-      do_error(drh, JW_ERR_MEM, "Out of memory" ,NULL);
-      XSRETURN_NO;
-    }
-    else
-    {
-      strcpy(buffer, "DROP DATABASE ");
-      strcat(buffer, dbname);
-      retval = drizzle_real_query(con, buffer, strlen(buffer));
-      free(buffer);
-    }
+      (void) drizzle_command_write(con, &res, DRIZZLE_COMMAND_DROP_DB, (uint8_t *)dbname, strlen(dbname), strlen(dbname), &retval);
   }
   else
   {
     croak("Unknown command: %s", command);
   }
-  if (retval)
+  if (retval != DRIZZLE_RETURN_OK)
   {
-    do_error(SvOK(dbh) ? dbh : drh, drizzle_errno(con),
-             drizzle_error(con) ,drizzle_sqlstate(con));
+    do_error(SvOK(dbh) ? dbh : drh, drizzle_con_errno(con),
+             drizzle_con_error(con) ,drizzle_con_sqlstate(con));
   }
 
   if (SvOK(dbh))
   {
-    drizzle_close(con);
+    (void) drizzle_con_close(con);
   }
   if (retval)
     XSRETURN_NO;
@@ -188,28 +192,35 @@ void
 _ListDBs(dbh)
   SV*	dbh
   PPCODE:
+{
+  drizzle_result_st res;
+  drizzle_row_t cur;
+  drizzle_return_t ret;
+
   D_imp_dbh(dbh);
-  DRIZZLE_RES* res;
-  DRIZZLE_ROW cur;
-  if (drizzle_query(imp_dbh->pdrizzle,"SHOW DATABASES"))
-  do_error(dbh,
-            drizzle_errno(imp_dbh->pdrizzle),
-            drizzle_error(imp_dbh->pdrizzle),
-            drizzle_sqlstate(imp_dbh->pdrizzle));
-  res= drizzle_store_result(imp_dbh->pdrizzle);
-  if (!res  && (!drizzle_db_reconnect(dbh)))
+
+  (void) drizzle_result_create(imp_dbh->con, &res);
+  (void) drizzle_query_str(imp_dbh->con, &res,"SHOW DATABASES", &ret);
+  if (ret != DRIZZLE_RETURN_OK)
+    do_error(dbh,
+            drizzle_con_errno(imp_dbh->con),
+            drizzle_con_error(imp_dbh->con),
+            drizzle_con_sqlstate(imp_dbh->con));
+  ret= drizzle_result_buffer(&res);
+  if (ret != DRIZZLE_RETURN_OK)
   {
-  do_error(dbh, drizzle_errno(imp_dbh->pdrizzle),
-  drizzle_error(imp_dbh->pdrizzle), drizzle_sqlstate(imp_dbh->pdrizzle));
+    do_error(dbh, drizzle_result_error_code(&res),
+    drizzle_result_error(&res), drizzle_result_sqlstate(&res));
   }
   else
   {
-  EXTEND(sp, drizzle_num_rows(res));
-  while ((cur = drizzle_fetch_row(res)))
-  {
-    PUSHs(sv_2mortal((SV*)newSVpv(cur[0], strlen(cur[0]))));
+    EXTEND(sp, drizzle_result_row_count(&res));
+    while ((cur = drizzle_row_next(&res)))
+    {
+      PUSHs(sv_2mortal((SV*)newSVpv(cur[0], strlen(cur[0]))));
+    }
   }
-  drizzle_free_result(res);
+  drizzle_result_free(&res);
 }
 
 
@@ -225,7 +236,8 @@ do(dbh, statement, attr=Nullsv, ...)
   int num_params= 0;
   int retval;
   struct imp_sth_ph_st* params= NULL;
-  DRIZZLE_RES* result= NULL;
+  drizzle_result_st _result;
+  drizzle_result_st *result;
   if (items > 3)
   {
     /*  Handle binding supplied values to placeholders	   */
@@ -240,15 +252,12 @@ do(dbh, statement, attr=Nullsv, ...)
     }
   }
   retval = drizzle_st_internal_execute(dbh, statement, attr, num_params,
-                                       params, &result, imp_dbh->pdrizzle, 0);
+                                       params, &result, imp_dbh->con, 0);
   if (params)
     Safefree(params);
 
-  if (result)
-  {
-    drizzle_free_result(result);
-    result= 0;
-  }
+  drizzle_result_free(result);
+
   /* remember that dbd_st_execute must return <= -2 for error	*/
   if (retval == 0)		/* ok with no rows affected	*/
     XST_mPV(0, "0E0");	/* (true but zero)		*/
@@ -266,13 +275,18 @@ ping(dbh)
   CODE:
     {
       int retval;
+      drizzle_return_t ret;
+      drizzle_result_st res;
       D_imp_dbh(dbh);
-      retval = (drizzle_ping(imp_dbh->pdrizzle) == 0);
+      drizzle_ping(imp_dbh->con, &res, &ret);
+      retval = (ret == DRIZZLE_RETURN_OK);
       if (!retval) {
-	if (drizzle_db_reconnect(dbh)) {
-	  retval = (drizzle_ping(imp_dbh->pdrizzle) == 0);
-	}
+        if (drizzle_db_reconnect(dbh)) {
+          drizzle_ping(imp_dbh->con, &res, &ret);
+          retval = (ret == DRIZZLE_RETURN_OK);
+        }
       }
+      drizzle_result_free(&res);
       RETVAL = boolSV(retval);
     }
   OUTPUT:
@@ -322,10 +336,16 @@ dataseek(sth, pos)
   PROTOTYPE: $$
   CODE:
 {
+  drizzle_return_t ret;
   D_imp_sth(sth);
   if (imp_sth->result) {
-    drizzle_data_seek(imp_sth->result, pos);
-    RETVAL = 1;
+    drizzle_row_seek(imp_sth->result, pos);
+    if (ret != DRIZZLE_RETURN_OK) {
+      RETVAL = 0;
+      do_error(sth, drizzle_result_error_code(imp_sth->result), drizzle_result_error(imp_sth->result), drizzle_result_sqlstate(imp_sth->result));
+    } else { 
+      RETVAL = 1;
+    }  
   } else {
     RETVAL = 0;
     do_error(sth, JW_ERR_NOT_ACTIVE, "Statement not active" ,NULL);
@@ -342,7 +362,8 @@ rows(sth)
     char buf[64];
   /* fix to make rows able to handle errors and handle max value from 
      affected rows.
-     if drizzle_affected_row returns an error, it's value is 18446744073709551614,
+     XXX check to see if this is still a reality -cb
+     if drizzleclient_affected_row returns an error, it's value is 18446744073709551614,
      while a (uint64_t)-1 is  18446744073709551615, so we have to add 1 to
      imp_sth->row_num to know if there's an error
   */
@@ -402,8 +423,8 @@ dbd_drizzle_get_info(dbh, sql_info_type)
 	    break;
 	case SQL_DBMS_VER:
 	    retsv = newSVpv(
-	        imp_dbh->pdrizzle->server_version,
-		strlen(imp_dbh->pdrizzle->server_version)
+	        drizzle_con_server_version(imp_dbh->con),
+		strlen(drizzle_con_server_version(imp_dbh->con))
 	    );
 	    break;
 	case SQL_IDENTIFIER_QUOTE_CHAR:
@@ -419,10 +440,11 @@ dbd_drizzle_get_info(dbh, sql_info_type)
 	    retsv= newSViv((sizeof(int) == 64 ) ? 63 : 31 );
 	    break;
 	case SQL_MAX_TABLE_NAME_LEN:
-	    retsv= newSViv(NAME_LEN);
+      // XXX need to look this up
+	    retsv= newSViv(254);
 	    break;
 	case SQL_SERVER_NAME:
-	    retsv= newSVpv(imp_dbh->pdrizzle->host_info,strlen(imp_dbh->pdrizzle->host_info));
+	    retsv= newSVpv(drizzle_con_host(imp_dbh->con),strlen(drizzle_con_host(imp_dbh->con)));
 	    break;
     	default:
  		croak("Unknown SQL Info type: %i",dbh);

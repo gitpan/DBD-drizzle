@@ -27,7 +27,7 @@ ok $dbh->do("DROP TABLE IF EXISTS $table"), "DROP TABLE IF EXISTS $table";
 
 my $create= <<EOT;
 CREATE TABLE $table (
-  id INT(4),
+  id INT,
   name VARCHAR(64)
   )
 EOT

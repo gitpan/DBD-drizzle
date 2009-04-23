@@ -29,7 +29,7 @@ ok $dbh->do("DROP TABLE IF EXISTS $table"), "drop table $table";
 my $create= <<EOT; 
 CREATE TABLE $table (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    num INT(3))
+    num INT)
 EOT
 
 ok $dbh->do($create), "create table $table";
