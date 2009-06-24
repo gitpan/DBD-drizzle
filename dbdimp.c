@@ -3,8 +3,8 @@
  * 
  *  DBD::drizzle - DBI driver for the drizzle database
  *
- *  Copyright (c) 2008       Patrick Galbraith
- *  Copyright 2009 Clint Byrum
+ *  Copyright (c) 2009 Patrick Galbraith
+ *  Copyright (c) 2009 Clint Byrum
  *
  *  You may distribute this under the terms of either the GNU General Public
  *  License or the Artistic License, as specified in the Perl README file.
@@ -74,9 +74,8 @@ count_params(char *statement)
         while ((c = *ptr)  &&  c != end_token)
         {
           if (c == '\\')
-            if (! *ptr)
+            if (! *(++ptr))
               continue;
-
           ++ptr;
         }
         if (c)
@@ -233,7 +232,8 @@ static char *parse_params(
       /* of drizzle.xs hardcodes all types to SQL_VARCHAR */
       if (!ph->type)
       {
-        if ( bind_type_guessing > 1 )
+        //if (bind_type_guessing > 1 )
+        if (bind_type_guessing)
         {
           valbuf= SvPV(ph->value, vallen);
           ph->type= SQL_INTEGER;
@@ -243,8 +243,9 @@ static char *parse_params(
               ph->type= SQL_VARCHAR;
           }
         }
-        else if (bind_type_guessing)
+        /*else if (bind_type_guessing)
           ph->type= SvNIOK(ph->value) ? SQL_INTEGER : SQL_VARCHAR;
+        */
         else
           ph->type= SQL_VARCHAR;
       }
@@ -337,6 +338,17 @@ static char *parse_params(
                 break;
             }
 
+            /* (note this sets *end, which we use if is_num) */
+            /* PMG */
+            if( parse_number(valbuf, vallen, &end) != 0 && is_num)
+            {
+              if (bind_type_guessing) {
+                /* .. not a number, so apparerently we guessed wrong */
+                is_num = 0;
+                ph->type = SQL_VARCHAR;
+              }
+            }
+
             /* we're at the end of the query, so any placeholders if */
             /* after a LIMIT clause will be numbers and should not be quoted */
             if (limit_flag == 1)
@@ -350,7 +362,7 @@ static char *parse_params(
             }
             else
             {
-              parse_number(valbuf, vallen, &end);
+              //parse_number(valbuf, vallen, &end);
               for (cp= valbuf; cp < end; cp++)
                   *ptr++= *cp;
             }
@@ -860,6 +872,7 @@ int drizzle_dr_connect(
                             imp_dbh_t *imp_dbh)
 {
   int portNr;
+  bool mysql_protocol= false;
   unsigned int client_flag;
   drizzle_return_t ret;
   drizzle_st *drizzle;
@@ -890,7 +903,13 @@ int drizzle_dr_connect(
       SV** svp;
       STRLEN lna;
 
-        /*
+      if ((svp = hv_fetch(hv, "drizzle_con_mysql",
+                          strlen("drizzle_con_mysql"), FALSE))  &&
+          *svp && SvTRUE(*svp))
+      {
+        mysql_protocol= true;
+      }
+#if defined FUTURE_FEATURES
       if ((svp = hv_fetch(hv, "drizzle_compression", 17, FALSE))  &&
           *svp && SvTRUE(*svp))
       {
@@ -916,8 +935,6 @@ int drizzle_dr_connect(
 
         drizzleclient_options(con, DRIZZLE_READ_DEFAULT_GROUP, gr);
       }
-      */
-      /*
       if ((svp = hv_fetch(hv,
                           "drizzle_client_found_rows", 23, FALSE)) && *svp)
       {
@@ -928,8 +945,16 @@ int drizzle_dr_connect(
       }
       if ((svp = hv_fetch(hv, "drizzle_unbuffered_result", 16, FALSE)) && *svp)
         imp_dbh->unbuffered_result = SvTRUE(*svp);
-      */
-      /*
+#endif
+      if ((svp = hv_fetch(hv, "drizzle_bind_type_guessing", 26, FALSE)) && *svp)
+      {
+        imp_dbh->bind_type_guessing= SvTRUE(*svp);
+        if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
+          PerlIO_printf(DBILOGFP,
+                        "imp_dbh->bind_type_guessing: %d\n",
+                        imp_dbh->bind_type_guessing);
+      }
+
 #if defined(CLIENT_MULTI_STATEMENTS)
       if ((svp = hv_fetch(hv, "drizzle_multi_statements", 22, FALSE)) && *svp)
       {
@@ -939,15 +964,15 @@ int drizzle_dr_connect(
           client_flag &= ~CLIENT_MULTI_STATEMENTS;
       }
 #endif
-      */
       /* HELMUT */
-      /*
+#if defined FUTURE_FEATURES
 #if defined(sv_utf8_decode)
       if ((svp = hv_fetch(hv, "drizzle_enable_utf8", 17, FALSE)) && *svp)
       {
       }
 #endif
-      */
+#endif
+
 #if defined(DBD_DRIZZLE_WITH_SSL) && (defined(CLIENT_SSL))
       if ((svp = hv_fetch(hv, "drizzle_ssl", 9, FALSE))  &&  *svp)
       {
@@ -999,37 +1024,17 @@ int drizzle_dr_connect(
         }
       }
 #endif
-      // XXX commented out until this is better understood
-      // XXX according to eday, LOCAL INFILE is not going to be supported -cb
-      /*
-      if ((svp = hv_fetch( hv, "drizzle_local_infile", 18, FALSE))  &&  *svp)
-      {
-        unsigned int flag = SvTRUE(*svp);
-        if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
-          PerlIO_printf(DBILOGFP,
-                        "imp_dbh->drizzle_dr_connect: Using" \
-                        " local infile %u.\n", flag);
-        drizzleclient_options(con, DRIZZLE_OPT_LOCAL_INFILE, (const char *) &flag);
-      }
-      */
     }
   }
 
   //client_flag|= CLIENT_MULTI_RESULTS;
-
-  //result = drizzleclient_connect(con, host, user, password, dbname,
-  //                              portNr, drizzle_socket, client_flag);
-  // XXX handle options later
-  // Everything here is already allocated, return is ok to ignore
-  // XXX this is not smooth.. there's no host with UDS
-  // XXX UDS isn't in drizzle, only mysql.. duh
-  //if ( strcmp(host, "localhost") ) { } else
-  //{ (void)drizzle_con_add_uds(drizzle, con, drizzle_socket, user,
-  //password, dbname, DRIZZLE_CON_NONE); } 
+  // XXX not sure about this logic...
   if (imp_dbh->con != NULL)
   {
-    imp_dbh->con= drizzle_con_add_tcp(drizzle, NULL, host, portNr, 
-                                      user, password, dbname, DRIZZLE_CON_NONE);
+    imp_dbh->con= drizzle_con_add_tcp(drizzle, NULL, host, portNr,
+                                      user, password, dbname,
+                                      mysql_protocol ?
+                                        DRIZZLE_CON_MYSQL : DRIZZLE_CON_NONE);
   }
   ret = drizzle_con_connect(imp_dbh->con);
 
@@ -1111,7 +1116,7 @@ int my_login(SV* dbh, imp_dbh_t *imp_dbh)
   user=		safe_hv_fetch(hv, "user", 4);
   password=	safe_hv_fetch(hv, "password", 8);
   dbname=	safe_hv_fetch(hv, "database", 8);
-  drizzle_socket=	safe_hv_fetch(hv, "drizzle_socket", 12);
+  drizzle_socket=	safe_hv_fetch(hv, "drizzle_socket", 14);
 
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
     PerlIO_printf(DBILOGFP,
@@ -1429,16 +1434,16 @@ dbd_db_STORE_attrib(
     }
     DBIc_set(imp_dbh, DBIcf_AutoCommit, bool_value);
   }
-  else  if (kl == 16 && strEQ(key,"drizzle_unbuffered_result"))
+  else  if (kl == 25 && strEQ(key,"drizzle_unbuffered_result"))
     imp_dbh->unbuffered_result = bool_value;
-  else if (kl == 20 && strEQ(key,"drizzle_auto_reconnect"))
+  else if (kl == 22 && strEQ(key,"drizzle_auto_reconnect"))
     imp_dbh->auto_reconnect = bool_value;
 
-  else if (kl == 31 && strEQ(key,"drizzle_unsafe_bind_type_guessing"))
-	imp_dbh->bind_type_guessing = SvIV(valuesv);
+  else if (kl == 26 && strEQ(key,"drizzle_bind_type_guessing"))
+    imp_dbh->bind_type_guessing = SvTRUE(valuesv);
   /*HELMUT */
 #if defined(sv_utf8_decode)
-  else if (kl == 17 && strEQ(key, "drizzle_enable_utf8"))
+  else if (kl == 19 && strEQ(key, "drizzle_enable_utf8"))
     imp_dbh->enable_utf8 = bool_value;
 #endif
   else
@@ -1497,21 +1502,25 @@ SV* dbd_db_FETCH_attrib(SV *dbh, imp_dbh_t *imp_dbh, SV *keysv)
       }
       break;
   }
-  if (strncmp(key, "drizzle_", 8) == 0) {
+  if (strncmp(key, "drizzle_", DRIZZLE_KEY_PREFIX) == 0) {
     fine_key = key;
-    key = key+6;
-    kl = kl-6;
+    key = key + DRIZZLE_KEY_PREFIX;
+    kl = kl - DRIZZLE_KEY_PREFIX;
   }
 
   /* MONTY:  Check if kl should not be used or used everywhere */
+  /*
+    why the heck bother checking kl? If it's equal to the string, then
+    is that not all we care about ? 
+  */
   switch(*key) {
   case 'a':
     if (kl == strlen("auto_reconnect") && strEQ(key, "auto_reconnect"))
       result= sv_2mortal(newSViv(imp_dbh->auto_reconnect));
     break;
-  case 'u':
-    if (kl == strlen("unsafe_bind_type_guessing") &&
-        strEQ(key, "unsafe_bind_type_guessing"))
+  case 'b':
+    if (kl == strlen("bind_type_guessing") &&
+        strEQ(key, "bind_type_guessing"))
       result = sv_2mortal(newSViv(imp_dbh->bind_type_guessing));
     break;
   case 'e':
@@ -1551,6 +1560,10 @@ SV* dbd_db_FETCH_attrib(SV *dbh, imp_dbh_t *imp_dbh, SV *keysv)
 
       result= (newRV_noinc((SV*)hv));
     }
+    break;
+  case 'i':
+    if (strEQ(key, "insertid"))
+      result= sv_2mortal(my_ulonglong2str(imp_dbh->insert_id));
     break;
   case 'p':
     if (strEQ(key, "protocol_version"))
@@ -1611,16 +1624,17 @@ dbd_st_prepare(
   D_imp_dbh_from_sth;
 
 
-  imp_sth->fetch_done= 0;
   imp_sth->done_desc= 0;
   imp_sth->result= NULL;
-  imp_sth->currow= 0;
   imp_sth->row= NULL;
 
   //(void)drizzle_result_create(imp_dbh->con, imp_dbh->result);
 
   /* Set default value of 'drizzle_unbuffered_result' attribute for sth from dbh */
-  svp= DBD_ATTRIB_GET_SVP(attribs, "drizzle_unbuffered_result", 16);
+  svp= DBD_ATTRIB_GET_SVP(attribs,
+                          "drizzle_unbuffered_result",
+                          strlen("drizzle_unbuffered_result"));
+
   imp_sth->unbuffered_result= svp ?
     SvTRUE(*svp) : imp_dbh->unbuffered_result;
 
@@ -1631,7 +1645,7 @@ dbd_st_prepare(
      Clean-up previous result set(s) for sth to prevent
      'Commands out of sync' error 
   */
-  // XXX drizzle_con_ready() for conn pooling would be awesome
+  // TODO drizzle_con_ready() for conn pooling would be awesome
   drizzle_st_free_result_sets(sth, imp_sth);
   //  (void)drizzle_result_create(imp_dbh->con, imp_sth->result);
 
@@ -1668,71 +1682,14 @@ int drizzle_st_free_result_sets (SV * sth, imp_sth_t * imp_sth)
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
     PerlIO_printf(DBILOGFP, "\t>- dbd_st_free_result_sets\n");
 
-  // XXX the goal is to flush out the connection
-  /*
-  if (imp_sth->result) {
-    // returns 0 when there's no row
-    while (row = drizzle_row_buffer(imp_sth->result, &ret)) {
-      if (ret != DRIZZLE_RETURN_OK) {
-        do_error(sth, drizzle_result_error_code(imp_sth->result), drizzle_result_error(imp_sth->result),
-                drizzle_result_sqlstate(imp_sth->result));
-      }
-      drizzle_row_free(imp_sth->result, row);
-    }
-    */
-    if (imp_sth->result)
-    {
-      drizzle_result_free(imp_sth->result);
-      imp_sth->result= NULL;
-    }
-  //}
-
-  /*
-  do
+  /* Nice and simple , thanks Eric */
+  if (imp_sth->result)
   {
-    if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
-      PerlIO_printf(DBILOGFP, "\t<- dbd_st_free_result_sets RC %d\n", next_result_rc);
-
-    if (next_result_rc == 0)
-    {
-      if (!(imp_sth->result = drizzleclient_use_result(imp_dbh->pdrizzle)))
-      {
-        // Check for possible error
-        if (drizzleclient_field_count(imp_dbh->pdrizzle))
-        {
-          if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
-          PerlIO_printf(DBILOGFP, "\t<- dbd_st_free_result_sets ERROR: %s\n",
-                                  drizzleclient_error(imp_dbh->pdrizzle));
-
-          do_error(sth, drizzleclient_errno(imp_dbh->pdrizzle), drizzleclient_error(imp_dbh->pdrizzle),
-                   drizzleclient_sqlstate(imp_dbh->pdrizzle));
-          return 0;
-        }
-      }
-    }
-    if (imp_sth->result)
-    {
-      drizzleclient_free_result(imp_sth->result);
-      imp_sth->result=NULL;
-    }
-  } while ((next_result_rc= drizzleclient_next_result(imp_dbh->pdrizzle))==0);
-
-  if (next_result_rc > 0)
-  {
-    if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
-      PerlIO_printf(DBILOGFP, "\t<- dbd_st_free_result_sets: Error while processing multi-result set: %s\n",
-                    drizzleclient_error(imp_dbh->pdrizzle));
-
-    do_error(sth, drizzleclient_errno(imp_dbh->pdrizzle), drizzleclient_error(imp_dbh->pdrizzle),
-             drizzleclient_sqlstate(imp_dbh->pdrizzle));
+    drizzle_result_free(imp_sth->result);
+    imp_sth->result= NULL;
   }
 
-
-  if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
-    PerlIO_printf(DBILOGFP, "\t<- dbd_st_free_result_sets\n");
-
   return 1;
-  */
 }
 
 
@@ -1773,22 +1730,30 @@ int dbd_st_more_results(SV* sth, imp_sth_t* imp_sth)
     imp_sth->av_attr[i]= Nullav;
   }
 
-  if ( imp_sth->row ) {
+  if ( imp_sth->unbuffered_result && imp_sth->row )
+  {
     drizzle_row_free(imp_sth->result, imp_sth->row);
     imp_sth->row= NULL;
   }
 
-  if ( imp_sth->unbuffered_result ) {
+
+  if ( imp_sth->unbuffered_result )
+  {
     imp_sth->row = drizzle_row_buffer(imp_sth->result, &ret);
-  } else {
+  }
+  else
+  {
     imp_sth->row = drizzle_row_next(imp_sth->result);
   }
 
-  if (imp_sth->unbuffered_result && ret != DRIZZLE_RETURN_OK) {
+  if (imp_sth->unbuffered_result && ret != DRIZZLE_RETURN_OK)
+  {
     more_rows = -1;
     do_error(sth, drizzle_result_error_code(imp_sth->result), drizzle_result_error(imp_sth->result),
             drizzle_result_sqlstate(imp_sth->result));
-  } else {          
+  }
+  else
+  {
     more_rows = imp_sth->row != NULL ? 1 : 0;
   }
 
@@ -1807,8 +1772,6 @@ int dbd_st_more_results(SV* sth, imp_sth_t* imp_sth)
 
   if (imp_sth->row) {
     /* We have a new rowset */
-    imp_sth->currow=0;
-
     /* delete cached handle attributes */
     /* XXX should be driven by a list to ease maintenance */
     hv_delete((HV*)SvRV(sth), "NAME", 4, G_DISCARD);
@@ -1817,7 +1780,7 @@ int dbd_st_more_results(SV* sth, imp_sth_t* imp_sth)
     hv_delete((HV*)SvRV(sth), "PRECISION", 9, G_DISCARD);
     hv_delete((HV*)SvRV(sth), "SCALE", 5, G_DISCARD);
     hv_delete((HV*)SvRV(sth), "TYPE", 4, G_DISCARD);
-    hv_delete((HV*)SvRV(sth), "drizzle_insertid", 14, G_DISCARD);
+    hv_delete((HV*)SvRV(sth), "drizzle_insertid", 16, G_DISCARD);
     hv_delete((HV*)SvRV(sth), "drizzle_is_auto_increment", 23, G_DISCARD);
     hv_delete((HV*)SvRV(sth), "drizzle_is_blob", 13, G_DISCARD);
     hv_delete((HV*)SvRV(sth), "drizzle_is_key", 12, G_DISCARD);
@@ -1873,7 +1836,7 @@ uint64_t drizzle_st_internal_execute(
                                        int unbuffered_result
                                       )
 {
-  bool bind_type_guessing;
+  bool bind_type_guessing= false;
   STRLEN slen;
   char *sbuf = SvPV(statement, slen);
   char *table;
@@ -1900,10 +1863,10 @@ uint64_t drizzle_st_internal_execute(
   {
     D_imp_dbh(h);
     /* if imp_dbh is not available, it causes segfault (proper) on OpenBSD */
-    if (imp_dbh)
+    if (imp_dbh && imp_dbh->bind_type_guessing)
       bind_type_guessing= imp_dbh->bind_type_guessing;
     else
-      bind_type_guessing=0;
+      bind_type_guessing= 0;
   }
   /* h is a sth */
   else
@@ -1918,11 +1881,11 @@ uint64_t drizzle_st_internal_execute(
   }
 
   salloc= parse_params(con,
-                              sbuf,
-                              &slen,
-                              params,
-                              num_params,
-                              bind_type_guessing);
+                       sbuf,
+                       &slen,
+                       params,
+                       num_params,
+                       bind_type_guessing);
 
   if (salloc)
   {
@@ -1959,14 +1922,14 @@ uint64_t drizzle_st_internal_execute(
       ++sbuf;
     }
     *sbuf++= '\0';
-    
-    if (!(query= malloc(strlen("SHOW COLUMNS FROM ``")+1+strlen(table)))) {
+
+    if (!(query= malloc(strlen("SHOW COLUMNS FROM ``") + 1 + strlen(table)))) {
       do_error(h, JW_ERR_MEM, "Out of memory", NULL);
       return -2;
     }
-    sprintf(query,"SHOW COLUMNS FROM `%s`", table); 
+    sprintf(query,"SHOW COLUMNS FROM `%s`", table);
     *result= drizzle_query_str(con, NULL, query, &ret);
-    
+
     free(query);
 
     free(table);
@@ -2005,7 +1968,7 @@ uint64_t drizzle_st_internal_execute(
              ,drizzle_result_sqlstate(*result));
       
 
-  // XXX this is *really* shady.. not sure how to differentiate yet
+  /* Best way to be sure we return the right number if possible */
   rows = drizzle_result_row_count(*result);
   if (!rows)
     rows = drizzle_result_affected_rows(*result);
@@ -2058,11 +2021,11 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
 
   statement= hv_fetch((HV*) SvRV(sth), "Statement", 9, FALSE);
 
-  /* 
+  /*
      Clean-up previous result set(s) for sth to prevent
-     'Commands out of sync' error 
+     'Commands out of sync' error
   */
-  drizzle_st_free_result_sets (sth, imp_sth);
+  drizzle_st_free_result_sets(sth, imp_sth);
 
   imp_sth->row_num= drizzle_st_internal_execute(
                                                 sth,
@@ -2089,7 +2052,6 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
       DBIc_NUM_FIELDS(imp_sth)= colcount;
       DBIc_ACTIVE_on(imp_sth);
       imp_sth->done_desc= 0;
-      imp_sth->fetch_done= 0;
     }
   }
 
@@ -2101,7 +2063,7 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
       PerlIO_printf doesn't always handle imp_sth->row_num %llu 
       consistantly!!
     */
-    sprintf(actual_row_num, "%llu", imp_sth->row_num);
+    sprintf(actual_row_num, "%l", imp_sth->row_num);
     PerlIO_printf(DBILOGFP,
                   " <- dbd_st_execute returning imp_sth->row_num %s\n",
                   actual_row_num);
@@ -2160,9 +2122,12 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
   AV *av;
   int av_length, av_readonly;
   drizzle_row_t row;
+
   D_imp_dbh_from_sth;
   drizzle_con_st *con= imp_dbh->con;
+
   D_imp_xxh(sth);
+
   drizzle_return_t ret;
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
     PerlIO_printf(DBILOGFP, "\t-> dbd_st_fetch\n");
@@ -2181,8 +2146,6 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
     return Nullav;
   }
 
-  imp_sth->currow++;
-
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
   {
     PerlIO_printf(DBILOGFP, "\tdbd_st_fetch result set details\n");
@@ -2193,8 +2156,6 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
                   drizzle_result_row_count(imp_sth->result));
     PerlIO_printf(DBILOGFP, "\tdrizzle_result_affected_rows=%llu\n",
                   drizzle_result_affected_rows(imp_sth->result));
-    PerlIO_printf(DBILOGFP, "\tdbd_st_fetch for %08lx, currow= %d\n",
-                  (u_long) sth,imp_sth->currow);
   }
 
   if ( imp_sth->row) {
@@ -2203,7 +2164,7 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
   } else {
     if (imp_sth->unbuffered_result) {
       // We dont buffer result, but we will buffer each row
-        row= drizzle_row_buffer(imp_sth->result, &ret);
+      row= drizzle_row_buffer(imp_sth->result, &ret);
     } else {
       row= drizzle_row_next(imp_sth->result);
     } 
@@ -2220,15 +2181,11 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
                drizzle_result_error(imp_sth->result),
                drizzle_result_sqlstate(imp_sth->result));
 
-    // XXX when would this ever be true?
-    //if (!drizzleclient_more_results(con))
     dbd_st_finish(sth, imp_sth);
     return Nullav;
   }
 
   num_fields= drizzle_result_column_count(imp_sth->result);
-  //fields= drizzleclient_fetch_fields(imp_sth->result);
-  //lengths= drizzleclient_fetch_lengths(imp_sth->result);
   lengths= (size_t *)drizzle_row_field_sizes(imp_sth->result);
 
   if ((av= DBIc_FIELDS_AV(imp_sth)) != Nullav)
@@ -2299,6 +2256,7 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
 
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
     PerlIO_printf(DBILOGFP, "\t<- dbd_st_fetch, %d cols\n", num_fields);
+
   return av;
 
 }
@@ -2382,16 +2340,18 @@ void dbd_st_destroy(SV *sth, imp_sth_t *imp_sth) {
     imp_sth->params= NULL;
   }
 
-  if (imp_sth->row)
+  if (imp_sth->unbuffered_result && imp_sth->row)
   {
     drizzle_row_free(imp_sth->result, imp_sth->row);
     imp_sth->row= NULL;
   }
-  if (imp_sth->result)
+  /* This causes a double-free */
+  /*if (imp_sth->result)
   {
     drizzle_result_free(imp_sth->result);
     imp_sth->result= NULL;
   }
+  */
 
   /* Free cached array attributes */
   for (i= 0; i < AV_ATTRIB_LAST; i++)
@@ -2535,7 +2495,6 @@ dbd_st_FETCH_internal(
         break;
 
       case AV_ATTRIB_SQL_TYPE:
-         //XXX hmmm
         sv= newSViv((int) native2sql(drizzle_column_type(col))->sql_datatype);
         break;
       case AV_ATTRIB_IS_PRI_KEY:
@@ -2687,17 +2646,17 @@ dbd_st_FETCH_internal(
     if (strEQ(key, "TYPE"))
       retsv= ST_FETCH_AV(AV_ATTRIB_SQL_TYPE);
     break;
-  case 'm':
+  case 'd':
     switch (kl) {
-    case 10:
+    case 12:
       if (strEQ(key, "drizzle_type"))
         retsv= ST_FETCH_AV(AV_ATTRIB_TYPE);
       break;
-    case 11:
+    case 13:
       if (strEQ(key, "drizzle_table"))
         retsv= ST_FETCH_AV(AV_ATTRIB_TABLE);
       break;
-    case 12:
+    case 14:
       if (       strEQ(key, "drizzle_is_key"))
         retsv= ST_FETCH_AV(AV_ATTRIB_IS_KEY);
       else if (strEQ(key, "drizzle_is_num"))
@@ -2707,11 +2666,11 @@ dbd_st_FETCH_internal(
       else if (strEQ(key, "drizzle_result"))
         retsv= sv_2mortal(newSViv((IV) imp_sth->result));
       break;
-    case 13:
+    case 15:
       if (strEQ(key, "drizzle_is_blob"))
         retsv= ST_FETCH_AV(AV_ATTRIB_IS_BLOB);
       break;
-    case 14:
+    case 16:
       if (strEQ(key, "drizzle_insertid"))
       {
         /* We cannot return an IV, because the insertid is a long.  */
@@ -2721,11 +2680,11 @@ dbd_st_FETCH_internal(
         return sv_2mortal(my_ulonglong2str(imp_dbh->insert_id));
       }
       break;
-    case 15:
+    case 17:
       if (strEQ(key, "drizzle_type_name"))
         retsv = ST_FETCH_AV(AV_ATTRIB_TYPE_NAME);
       break;
-    case 16:
+    case 18:
       if ( strEQ(key, "drizzle_is_pri_key"))
         retsv= ST_FETCH_AV(AV_ATTRIB_IS_PRI_KEY);
       else if (strEQ(key, "drizzle_max_length"))
@@ -2733,11 +2692,11 @@ dbd_st_FETCH_internal(
       else if (strEQ(key, "drizzle_unbuffered_result"))
         retsv= boolSV(imp_sth->unbuffered_result);
       break;
-    case 19:
+    case 21:
       if (strEQ(key, "drizzle_warning_count"))
         retsv= sv_2mortal(newSViv((IV) imp_sth->warning_count));
       break;
-    case 23:
+    case 25:
       if (strEQ(key, "drizzle_is_auto_increment"))
         retsv = ST_FETCH_AV(AV_ATTRIB_IS_AUTO_INCREMENT);
       break;
@@ -2915,7 +2874,7 @@ int drizzle_db_reconnect(SV* h)
    * the execute, so next time $dbh->quote() gets called, instant SIGSEGV!
    */
 
-  // XXX pretty sure this one always allocates RAM so being careful
+  /* this one always allocates RAM so being careful */
   conres= drizzle_con_clone(imp_dbh->drizzle, &con, imp_dbh->con);
 
   if (!my_login(h, imp_dbh))
@@ -3122,59 +3081,76 @@ SV *drizzle_db_last_insert_id(SV *dbh, imp_dbh_t *imp_dbh,
 
 int parse_number(char *string, STRLEN len, char **end)
 {
-    int seen_neg;
-    int seen_dec;
-    char *cp;
+  int seen_neg= 0;
+  int seen_dec= 0;
+  int seen_e= 0;
+  int seen_plus= 0;
+  char *cp;
 
-    seen_neg= 0;
-    seen_dec= 0;
+  if (len <= 0)
+  {
+    len= strlen(string);
+  }
 
-    if (len <= 0) {
-        len= strlen(string);
-    }
+  cp= string;
 
-    cp= string;
+  /* Skip leading whitespace */
+  while (*cp && isspace(*cp))
+    cp++;
 
-    /* Skip leading whitespace */
-    while (*cp && isspace(*cp))
-        cp++;
-
-    for ( ; *cp; cp++)
+  for ( ; *cp; cp++)
+  {
+    if ('-' == *cp)
     {
-        if ('-' == *cp)
-        {
-            if (seen_neg)
-            {
-              /* second '-' */
-              break;
-            }
-            else if (cp > string)
-            {
-              /* '-' after digit(s) */
-              break;
-            }
-            seen_neg= 1;
-        }
-        else if ('.' == *cp)
-        {
-            if (seen_dec)
-            {
-                /* second '.' */
-                break;
-            }
-            seen_dec= 1;
-        }
-        else if (!isdigit(*cp))
-        {
-            break;
-        }
+      //if (seen_neg)
+      if (seen_neg >= 2)
+      {
+        /*
+          third '-'. number can contains two '-'.
+          because -1e-10 is valid number
+        */
+        break;
+      }
+      seen_neg += 1;
     }
-
-    *end= cp;
-
-    if (cp - string < (int) len) {
-        return -1;
+    else if (*cp == '.')
+    {
+      if (seen_dec)
+      {
+        /* second '.' */
+        break;
+      }
+      seen_dec= 1;
     }
+    else if (*cp == 'e')
+    {
+      if (seen_e)
+      {
+        /* second 'e' */
+        break;
+      }
+      seen_e= 1;
+    }
+    else if (*cp == '+')
+    {
+      if (seen_plus)
+      {
+        /* second '+' */
+        break;
+      }
+    }
+    else if (!isdigit(*cp))
+    {
+      break;
+    }
+  }
 
-    return 0;
+  *end= cp;
+
+  if (len == 0 || cp - string < (int) len)
+  {
+    return -1;
+  }
+
+  return 0;
 }

@@ -18,8 +18,6 @@ if ($@) {
 }
 plan tests => 7; 
 
-$dbh->{mysql_server_prepare}= 0;
-
 ok(defined $dbh, "Connected to database for key info tests");
 
 ok($dbh->do("DROP TABLE IF EXISTS $table"), "Dropped table");

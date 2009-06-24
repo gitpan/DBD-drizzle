@@ -115,8 +115,6 @@ struct imp_dbh_st {
     } stats;
     unsigned short int  bind_type_guessing;
     int unbuffered_result;
-    int use_server_side_prepare;
-    int has_autodetect_prepare;
     uint64_t insert_id;
     bool enable_utf8;
 };
@@ -183,8 +181,6 @@ struct imp_sth_st {
 
     drizzle_result_st * result;  /* result                                 */
     drizzle_row_t row;           /* sometimes we have to read a row early  */
-    int currow;                  /* number of current row                  */
-    int fetch_done;              /* mark that fetch done                   */
     uint64_t row_num;            /* total number of rows                   */
 
     int   done_desc;             /* have we described this sth yet ?	    */
@@ -228,9 +224,12 @@ struct imp_sth_st {
 #define dbd_db_type_info_all    drizzle_db_type_info_all
 #define dbd_db_quote            drizzle_db_quote
 
+#define DBD_DRIZZLE_INSERT_ID_IS_GOOD 1
 #ifdef DBD_DRIZZLE_INSERT_ID_IS_GOOD /* prototype was broken in some versions of dbi */
 #define dbd_db_last_insert_id   drizzle_db_last_insert_id
 #endif
+
+#define DRIZZLE_KEY_PREFIX 8
 
 #include <dbd_xsh.h>
 void dbd_drizzle_dr_driver(SV *drh);

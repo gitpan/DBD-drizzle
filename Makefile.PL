@@ -36,7 +36,7 @@ Getopt::Long::GetOptions(
     "cflags=s",
     "libs=s",
     "verbose",
-    "ps-protocol",
+    "bind-type-guessing",
     "nocatchstderr",
     "ssl!",
     "nofoundrows!",
@@ -80,7 +80,8 @@ MSG
   }
 }
 
-for my $key (qw/testdb testhost cflags libs nocatchstderr ssl nofoundrows/)
+for my $key (qw/testdb testhost cflags libs nocatchstderr ssl nofoundrows
+              bind-type-guessing/)
 {
   Configure($opt, $source, $key);
 }
@@ -119,7 +120,10 @@ MSG
 sleep 5;
 
 eval { require File::Spec };
-my $ps_dsn= "";
+my $dsn= '';
+if (defined $opt->{'bind-type-guessing'}) {
+    $dsn= "\$::test_dsn .= \";drizzle_bind_type_guessing=1\";\n"; 
+}
 my $fileName = $@ ?
   "t/drizzle.mtest" : File::Spec->catfile("t", "drizzle.mtest");
 (open(FILE, ">$fileName") &&
@@ -132,7 +136,7 @@ my $fileName = $@ ?
 	      "\$::test_dsn = \"DBI:drizzle:\$::test_db\";\n" .
               "\$::test_dsn .= \":\$::test_host\" if \$::test_host;\n" .
 	      "\$::test_dsn .= \":\$::test_port\" if \$::test_port;\n".
-              $ps_dsn .
+              $dsn .
 	      "} 1;\n"))  &&
   close(FILE))  ||  die "Failed to create $fileName: $!";
 
@@ -164,9 +168,9 @@ if ($ExtUtils::MakeMaker::VERSION >= 5.43) {
   $o{'CAPI'} = 'TRUE'
     if ($ExtUtils::MakeMaker::VERSION >= 5.43
 	&&  $Config::Config{'archname'} =~ /-object\b/i);
-  $o{'AUTHOR'} = 'Patrick Galbraith <patg@patg.net>';
+  $o{'AUTHOR'} = 'Patrick Galbraith <patg@patg.net>, Clint Byrum <clint@fewbar.com>';
   $o{'ABSTRACT'} =
-    'A Drizzle driver for the Perl5 Database Interface (DBI)';
+    'A libdrizzle driver for the Perl5 Database Interface (DBI)';
   $o{'PREREQ_PM'} = { 'DBI' => 1.08,
 		      'Data::Dumper' => 0 };
 }
@@ -207,9 +211,13 @@ Possible options are:
   --nocatchstderr        Supress using the "myld" script that redirects
                          STDERR while running the linker.
   --nofoundrows          Change the behavior of \$sth->rows() so that it
-  			 returns the number of rows physically modified 
-			 instead of the rows matched
-  --ssl			 Enable SSL support
+  			                 returns the number of rows physically modified 
+			                   instead of the rows matched
+  --bind-type-guessing   Toggle the use of driver attribute mysql_bind_type_guessing 
+                         This feature makes it so driver-emulated prepared statements
+                         try to "guess" if a value being bound is numeric, in which 
+                         case, quotes will not be put around the value.
+  --ssl			             Enable SSL support (not supported yet)
   --help                 Print this message and exit
 
 All options may be configured on the command line. If they are
@@ -241,6 +249,10 @@ sub Configure
 {
   my($opt, $source, $param) = @_;
 
+  if ($param eq 'bind-type-guessing') {
+    $source->{$param}= ($opt->{$param}) ? "User's choice" : 'default';
+    return;
+  }
   if (exists($opt->{$param}))
   {
     $source->{$param} = "User's choice";

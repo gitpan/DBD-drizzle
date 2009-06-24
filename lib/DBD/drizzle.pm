@@ -9,7 +9,7 @@ use DynaLoader();
 use Carp ();
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.100';
+$VERSION = '0.200';
 
 bootstrap DBD::drizzle $VERSION;
 
@@ -29,7 +29,7 @@ sub driver{
 				   'Version' => $VERSION,
 				   'Err'    => \$DBD::drizzle::err,
 				   'Errstr' => \$DBD::drizzle::errstr,
-				   'Attribution' => 'DBD::drizzle by Patrick Galbraith'
+				   'Attribution' => 'DBD::drizzle by Patrick Galbraith and Clint Byrum'
 				 });
 
     $drh;
@@ -1573,6 +1573,10 @@ F</usr/lib/drizzle/libdrizzleclient.a> or F</usr/lib/libdrizzleclient.so>.
 
 =head1 WIN32 INSTALLATION
 
+There currently is no support for Drizzle or DBD::drizzle on windows. 
+The documentation below is a remnant o DBD::mysql left here in the
+event that windows support becomes manifest.
+
 If you are using ActivePerl, you may use ppm to install DBD-drizzle.
 For Perl 5.6, upgrade to Build 623 or later, then it is sufficient
 to run
@@ -1709,22 +1713,23 @@ in the PPM program.
 
 =head1 AUTHORS
 
-The current version of B<DBD::drizzle> is almost completely written
-by Jochen Wiedmann, and is now being maintained by
-Patrick Galbraith (I<patg@drizzle.com>). 
+The current version of B<DBD::drizzle> is based off of DBD::mysql
+which the majority of was written by Jochen Wiedmann.
+Much code was re-shuffled, sliced, diced and decrufticated by 
+Patrick Galbraith (I<patg@drizzle.com>) and Clint Byrum (I<clint@fewbar.com>)
+to work with Drizzle.
+
 The first version's author was Alligator Descartes, who was aided
 and abetted by Gary Shea, Andreas König and Tim Bunce amongst others.
-
-The B<Mysql> module was originally written by Andreas König
-<koenig@kulturbox.de>. The current version, mainly an emulation
-layer, is from Jochen Wiedmann.
-
+Also credit goes to Rudy Lippan for his stewardship, development (emulation)
+and maintenance of DBD::mysql for several years.
 
 =head1 COPYRIGHT
 
 
 This module is 
-Large Portions Copyright (c) 2004-2006 MySQL Patrick Galbraith, Alexey Stroganov,
+Large Portions Copyright (c) 2004-2009 Patrick Galbraith, Clint Byrum
+Alexey Stroganov 2004-2006,
 Large Portions Copyright (c) 2003-2005 Rudolf Lippan; Large Portions 
 Copyright (c) 1997-2003 Jochen Wiedmann, with code portions 
 Copyright (c)1994-1997 their original authors This module is

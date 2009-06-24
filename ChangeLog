@@ -1,3 +1,12 @@
+2009-06-22 Patrick Galbraith <patg@patg.net> (0.200)
+* Fixed broken tests
+* Fixed bind_type_guessing to work as it does in DBD::mysql
+* Added missing insert_id database handle attribute fetching
+* Added several tests that were missing that exist in DBD::mysql
+* Removed extra cruft from lib.pl
+* Fixed hash-key retrieval for connection options
+* Fixed double-free of imp_dbh->result in dbd_st_destroy
+
 2009-04-23 Clint Byrum <clint@fewbar.com>, Patrick Galbraith <patg@patg.net> (0.100)
 * Working with libdrizzle! All tests pass on both Linux and OS X
 

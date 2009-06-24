@@ -2,7 +2,7 @@
 # vim: ft=perl
 
 use strict;
-use vars qw($table $test_dsn $test_user $test_password $mdriver);
+use vars qw($table $test_dsn $test_user $test_password);
 use Test::More;
 use DBI;
 use Carp qw(croak);

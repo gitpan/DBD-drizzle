@@ -5,7 +5,6 @@ use Test::More ;
 use DBI;
 use DBI::Const::GetInfoType;
 use strict;
-use vars qw($mdriver);
 $|= 1;
 
 use vars qw($test_dsn $test_user $test_password);
@@ -13,10 +12,10 @@ use lib 't', '.';
 require 'lib.pl';
 
 my $dbh;
-eval {$dbh= DBI->connect($test_dsn, $test_user, $test_password,
+print "test_dsn $test_dsn\n";
+eval {$dbh= DBI->connect("$test_dsn;port=4427", $test_user, $test_password,
                       { RaiseError => 1, PrintError => 1, AutoCommit => 0 });};
 
-DBI->trace(5, '/tmp/dbd_drizzle.trace');
 if ($@) {
     plan skip_all => "ERROR: $DBI::errstr Can't continue test $@";
 }

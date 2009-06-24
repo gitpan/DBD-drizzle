@@ -31,8 +31,6 @@ if ($@) {
 }
 plan tests => 25; 
 
-$dbh->{mysql_server_prepare}= 0;
-
 ok $dbh->do("DROP TABLE IF EXISTS $table"), "drop table if exists $table";
 
 $create = <<EOC;

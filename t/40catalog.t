@@ -28,8 +28,9 @@ ok(defined $dbh, "connecting");
 
 my $sth;
 
-my ($version)= $dbh->selectrow_array("SELECT version()")
-  or DbiError($dbh->err, $dbh->errstr);
+my ($version)= $dbh->selectrow_array("SELECT version()") 
+  or (print "ERROR code: $dbh->err errstr: $dbh->errstr\n" &&
+    die);
 
 #
 # Bug #26604: foreign_key_info() implementation
@@ -42,7 +43,9 @@ SKIP: {
 
   my ($dummy,$have_innodb)=
     $dbh->selectrow_array("SHOW VARIABLES LIKE 'have_innodb'")
-    or DbiError($dbh->err, $dbh->errstr);
+  or (print "ERROR code: $dbh->err errstr: $dbh->errstr\n" &&
+    die);
+
   skip "Server doesn't support InnoDB, needed for testing foreign keys", 16
     unless defined $have_innodb && $have_innodb eq "YES";
 
