@@ -9,7 +9,7 @@ use DynaLoader();
 use Carp ();
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.200';
+$VERSION = '0.300';
 
 bootstrap DBD::drizzle $VERSION;
 

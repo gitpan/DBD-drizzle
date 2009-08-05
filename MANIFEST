@@ -11,6 +11,7 @@ eg/prepare_memory_usage.pl
 t/30insertfetch.t
 t/50chopblanks.t
 t/50commit.t
+t/drizzle.mtest
 t/40listfields.t
 t/40bindparam2.t
 t/10connect.t

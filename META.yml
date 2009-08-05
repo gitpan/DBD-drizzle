@@ -1,12 +1,15 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         DBD-drizzle
-version:      0.200
-version_from: lib/DBD/drizzle.pm
-installdirs:  site
-requires:
+--- #YAML:1.0
+name:                DBD-drizzle
+version:             0.300
+abstract:            A libdrizzle driver for the Perl5 Database Interface (DBI)
+license:             ~
+author:              
+    - Patrick Galbraith <patg@patg.net>, Clint Byrum <clint@fewbar.com>
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
     Data::Dumper:                  0
     DBI:                           1.08
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3

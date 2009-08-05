@@ -1947,8 +1947,15 @@ uint64_t drizzle_st_internal_execute(
   *result = (drizzle_result_st *)drizzle_query(con, NULL, sbuf, slen, &ret);
   if (ret != DRIZZLE_RETURN_OK) {
     Safefree(salloc);
-    do_error(h, drizzle_con_errno(con), drizzle_con_error(con),
-             drizzle_con_sqlstate(con));
+
+    /*do_error(h, drizzle_con_errno(con), drizzle_con_error(con),
+		    drizzle_con_sqlstate(con));
+*/
+
+    do_error(h, drizzle_con_error_code(con), drizzle_con_error(con),
+		    drizzle_con_sqlstate(con));
+
+
     if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
       PerlIO_printf(DBILOGFP, "IGNORING ERROR errno %d\n", errno);
     return -2;
@@ -2149,12 +2156,11 @@ dbd_st_fetch(SV *sth, imp_sth_t* imp_sth)
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
   {
     PerlIO_printf(DBILOGFP, "\tdbd_st_fetch result set details\n");
-    PerlIO_printf(DBILOGFP, "\timp_sth->result=%08lx\n",imp_sth->result);
-    PerlIO_printf(DBILOGFP, "\tdrizzle_result_column_count=%llu\n",
+    PerlIO_printf(DBILOGFP, "\tdrizzle_result_column_count=%d\n",
                   drizzle_result_column_count(imp_sth->result));
-    PerlIO_printf(DBILOGFP, "\tdrizzle_result_row_count=%llu\n",
+    PerlIO_printf(DBILOGFP, "\tdrizzle_result_row_count=%lu\n",
                   drizzle_result_row_count(imp_sth->result));
-    PerlIO_printf(DBILOGFP, "\tdrizzle_result_affected_rows=%llu\n",
+    PerlIO_printf(DBILOGFP, "\tdrizzle_result_affected_rows=%lu\n",
                   drizzle_result_affected_rows(imp_sth->result));
   }
 
@@ -2675,7 +2681,7 @@ dbd_st_FETCH_internal(
       {
         /* We cannot return an IV, because the insertid is a long.  */
         if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
-          PerlIO_printf(DBILOGFP, "INSERT ID %d\n", imp_dbh->insert_id);
+          PerlIO_printf(DBILOGFP, "INSERT ID %lu\n", imp_dbh->insert_id);
 
         return sv_2mortal(my_ulonglong2str(imp_dbh->insert_id));
       }

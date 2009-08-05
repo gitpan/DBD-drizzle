@@ -119,6 +119,7 @@ else {
       name VARCHAR(64) NOT NULL default ''
       ) ENGINE=$engine
 EOT
+print "create $create\n";
 
   ok $dbh->do($create), 'create $table';
 

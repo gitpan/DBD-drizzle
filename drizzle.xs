@@ -370,7 +370,7 @@ rows(sth)
   if (imp_sth->row_num+1 ==  (uint64_t) -1)
     sprintf(buf, "%d", -1);
   else
-    sprintf(buf, "%llu", imp_sth->row_num);
+    sprintf(buf, "%lu", imp_sth->row_num);
 
   ST(0) = sv_2mortal(newSVpvn(buf, strlen(buf)));
 
@@ -447,7 +447,7 @@ dbd_drizzle_get_info(dbh, sql_info_type)
 	    retsv= newSVpv(drizzle_con_host(imp_dbh->con),strlen(drizzle_con_host(imp_dbh->con)));
 	    break;
     	default:
- 		croak("Unknown SQL Info type: %i",dbh);
+ 		croak("Unknown SQL Info type");
     }
     ST(0) = sv_2mortal(retsv);
 

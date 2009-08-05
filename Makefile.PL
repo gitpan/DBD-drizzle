@@ -68,15 +68,15 @@ MSG
   }
   else
   {
-    if (! `pkg-config`)
-    {
-      print <<MSG;
+    #if (! `pkg-config`)
+    #{
+    #  print <<MSG;
 
-Cannot find the file 'pkg-config'! Your execution PATH doesn't seem 
-not contain the path to pkg-config. Resorting to guessed values!
-MSG
-    }
-    $opt->{'pkg-config'} = "pkg-config";
+#Cannot find the file 'pkg-config'! Your execution PATH doesn't seem 
+#not contain the path to pkg-config. Resorting to guessed values!
+#MSG
+ #   }
+ #   $opt->{'pkg-config'} = "pkg-config";
   }
 }
 
@@ -264,53 +264,56 @@ sub Configure
     $opt->{$param} = $TESTDB;
   }
 
-  if ($^O !~ /mswin32/i)
-  {
-    # First try to get options values from pkg-config
-      unless ($param eq '--libs' && $param eq '--cflags') {
-          my $command = $opt->{'pkg-config'} . " --$param libdrizzle" unless $param eq '--libs' && $param eq '--cflags';
-          eval 
-          {
-              print "running $command\n";
-              open(PIPE, "$command |") or die "Can't find pkg-config.";
-          };
+#   if ($^O !~ /mswin32/i)
+#   {
+#     # First try to get options values from pkg-config
+#       unless ($param eq '--libs' && $param eq '--cflags') {
+#           my $command = $opt->{'pkg-config'} . " --$param libdrizzle" unless $param eq '--libs' && $param eq '--cflags';
+#           eval 
+#           {
+#               print "running $command\n";
+#               open(PIPE, "$command |") or die "Can't find pkg-config.";
+#           };
+# 
+#           if (!$@)
+#           {
+#               my $str = "";
+#               while (defined(my $line = <PIPE>)) 
+#               {
+#                   $str .= $line;
+#               }
+#               if ($param eq 'libs') {
+#                 $str .= ' -lz';
+#               }
+#               if ($str ne ""  &&  $str !~ /Options:/) 
+#               {
+#                   $str =~ s/\s+$//s;
+#                   $str =~ s/^\s+//s;
+# 
+# # Unfortunately ExtUtils::MakeMaker doesn't deal very well
+# # with -L'...'
+#                   $str =~ s/\-L\'(.*?)\'/-L$1/sg;
+#                   $str =~ s/\-L\"(.*?)\"/-L$1/sg;
+# 
+#                   $opt->{$param} = $str;
+#                   $source->{$param} = "pkg-config";
+#                   return;
+#               }
+#           }
+#       }
+#       else
+#       {
+#           print "Can't find pkg-config. Use --pkg-config option to specify where pkg-config is located\n";
+#       }
+#  }
 
-          if (!$@)
-          {
-              my $str = "";
-              while (defined(my $line = <PIPE>)) 
-              {
-                  $str .= $line;
-              }
-              if ($param eq 'libs') {
-                $str .= ' -lz';
-              }
-              if ($str ne ""  &&  $str !~ /Options:/) 
-              {
-                  $str =~ s/\s+$//s;
-                  $str =~ s/^\s+//s;
-
-# Unfortunately ExtUtils::MakeMaker doesn't deal very well
-# with -L'...'
-                  $str =~ s/\-L\'(.*?)\'/-L$1/sg;
-                  $str =~ s/\-L\"(.*?)\"/-L$1/sg;
-
-                  $opt->{$param} = $str;
-                  $source->{$param} = "pkg-config";
-                  return;
-              }
-          }
-      }
-      else
-      {
-          print "Can't find pkg-config. Use --pkg-config option to specify where pkg-config is located\n";
-      }
-  }
-
-  elsif ($param eq "nocatchstderr" || $param eq "nofoundrows")
+  if ($param eq "nocatchstderr" || $param eq "nofoundrows")
   {
     $source->{$param} = "default";
     $opt->{$param} = 0;
+  }
+  elsif ($param eq 'testdb' || $param eq 'testhost') 
+  {
   }
   elsif ($param eq "cflags") 
   {

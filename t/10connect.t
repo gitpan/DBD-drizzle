@@ -13,7 +13,7 @@ require 'lib.pl';
 
 my $dbh;
 print "test_dsn $test_dsn\n";
-eval {$dbh= DBI->connect("$test_dsn;port=4427", $test_user, $test_password,
+eval {$dbh= DBI->connect("$test_dsn", $test_user, $test_password,
                       { RaiseError => 1, PrintError => 1, AutoCommit => 0 });};
 
 if ($@) {
