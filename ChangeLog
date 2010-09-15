@@ -1,3 +1,7 @@
+2010-09-14 Patrick Galbraith <patg@patg.net> (0.301)
+* Removed drizzle_refresh call from drizzle.xs
+* Removed non-C90 declarations
+
 2009-08-05 Patrick Galbraith <patg@patg.net> (0.300)
 
 * Fixed how error is raised in dbd_st_internal_execute. Problem with 

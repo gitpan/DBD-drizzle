@@ -1239,11 +1239,12 @@ int dbd_db_login6(SV* dbh, imp_dbh_t* imp_dbh, char* dbname, char* user,
 int
 dbd_db_commit(SV* dbh, imp_dbh_t* imp_dbh)
 {
+  drizzle_result_st res;
+  drizzle_return_t ret;
+
   if (DBIc_has(imp_dbh, DBIcf_AutoCommit))
     return FALSE;
 
-  drizzle_result_st res;
-  drizzle_return_t ret;
   drizzle_query_str(imp_dbh->con, &res, "COMMIT", &ret);
   if (ret != DRIZZLE_RETURN_OK) {
     do_error(dbh, drizzle_result_error_code(&res), drizzle_result_error(&res)
@@ -1258,12 +1259,13 @@ dbd_db_commit(SV* dbh, imp_dbh_t* imp_dbh)
  dbd_db_rollback
 */
 int dbd_db_rollback(SV* dbh, imp_dbh_t* imp_dbh) {
+  drizzle_result_st res;
+  drizzle_return_t ret;
+
   /* croak, if not in AutoCommit mode */
   if (DBIc_has(imp_dbh, DBIcf_AutoCommit))
     return FALSE;
 
-  drizzle_result_st res;
-  drizzle_return_t ret;
   drizzle_query_str(imp_dbh->con, &res, "ROLLBACK", &ret);
   if (ret != DRIZZLE_RETURN_OK) {
     do_error(dbh, drizzle_result_error_code(&res), drizzle_result_error(&res)
@@ -2003,6 +2005,7 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
 {
   char actual_row_num[64];
   int i;
+  uint16_t colcount;
   SV **statement;
   D_imp_dbh_from_sth;
   D_imp_xxh(sth);
@@ -2045,7 +2048,7 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
                                                 imp_sth->unbuffered_result
                                                );
 
-  uint16_t colcount = drizzle_result_column_count(imp_sth->result);
+  colcount = drizzle_result_column_count(imp_sth->result);
 
   if (imp_sth->row_num+1 != (uint64_t )-1)
   {

@@ -1,15 +1,23 @@
 --- #YAML:1.0
-name:                DBD-drizzle
-version:             0.300
-abstract:            A libdrizzle driver for the Perl5 Database Interface (DBI)
-license:             ~
-author:              
+name:               DBD-drizzle
+version:            0.301
+abstract:           A libdrizzle driver for the Perl5 Database Interface (DBI)
+author:
     - Patrick Galbraith <patg@patg.net>, Clint Byrum <clint@fewbar.com>
-generated_by:        ExtUtils::MakeMaker version 6.42
-distribution_type:   module
-requires:     
-    Data::Dumper:                  0
-    DBI:                           1.08
+license:            unknown
+distribution_type:  module
+configure_requires:
+    ExtUtils::MakeMaker:  0
+build_requires:
+    ExtUtils::MakeMaker:  0
+requires:
+    Data::Dumper:  0
+    DBI:           1.08
+no_index:
+    directory:
+        - t
+        - inc
+generated_by:       ExtUtils::MakeMaker version 6.54
 meta-spec:
-    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
-    version: 1.3
+    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
+    version:  1.4

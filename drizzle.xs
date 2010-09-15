@@ -98,6 +98,7 @@ void _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,p
   drizzle_return_t retval;
   drizzle_st *drizzle;
   drizzle_con_st *con = NULL;
+  drizzle_result_st res;
 
   /*
    *  Connect to the database, if required.
@@ -129,13 +130,12 @@ void _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,p
     }
   }
 
-  drizzle_result_st res;
   (void) drizzle_result_create(con, &res);
 
   if (strEQ(command, "shutdown"))
+  {
     (void) drizzle_shutdown(con, &res, DRIZZLE_SHUTDOWN_DEFAULT, &retval);
-  else if (strEQ(command, "refresh"))
-    (void) drizzle_refresh(con, &res, DRIZZLE_REFRESH_LOG, &retval);
+  }
   else if (strEQ(command, "createdb"))
   {
       (void) drizzle_command_write(con, &res, DRIZZLE_COMMAND_CREATE_DB, (uint8_t *)dbname, strlen(dbname), strlen(dbname), &retval);
