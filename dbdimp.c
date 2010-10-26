@@ -2048,24 +2048,28 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
                                                 imp_sth->unbuffered_result
                                                );
 
-  colcount = drizzle_result_column_count(imp_sth->result);
-
-  if (imp_sth->row_num+1 != (uint64_t )-1)
+  colcount = 0;
+  if (imp_sth->result != NULL)
   {
-    if (!colcount) {
-      // XXX serious sync issues arise when multiple cons are used w/ threading
-      imp_dbh->insert_id= drizzle_result_insert_id(imp_sth->result);
-    }
-    else
-    {
-      /** Store the result in the current statement handle */
-      DBIc_NUM_FIELDS(imp_sth)= colcount;
-      DBIc_ACTIVE_on(imp_sth);
-      imp_sth->done_desc= 0;
-    }
-  }
+    colcount = drizzle_result_column_count(imp_sth->result);
 
-  imp_sth->warning_count = drizzle_result_warning_count(imp_sth->result);
+    if (imp_sth->row_num+1 != (uint64_t )-1)
+    {
+      if (!colcount) {
+        // XXX serious sync issues arise when multiple cons are used w/ threading
+        imp_dbh->insert_id= drizzle_result_insert_id(imp_sth->result);
+      }
+      else
+      {
+        /** Store the result in the current statement handle */
+        DBIc_NUM_FIELDS(imp_sth)= colcount;
+        DBIc_ACTIVE_on(imp_sth);
+        imp_sth->done_desc= 0;
+      }
+    }
+
+    imp_sth->warning_count = drizzle_result_warning_count(imp_sth->result);
+  }
 
   if (DBIc_TRACE_LEVEL(imp_xxh) >= 2)
   {
@@ -2073,7 +2077,7 @@ int dbd_st_execute(SV* sth, imp_sth_t* imp_sth)
       PerlIO_printf doesn't always handle imp_sth->row_num %llu 
       consistantly!!
     */
-    sprintf(actual_row_num, "%l", imp_sth->row_num);
+    sprintf(actual_row_num, "%l", (long int) imp_sth->row_num);
     PerlIO_printf(DBILOGFP,
                   " <- dbd_st_execute returning imp_sth->row_num %s\n",
                   actual_row_num);
@@ -3162,4 +3166,54 @@ int parse_number(char *string, STRLEN len, char **end)
   }
 
   return 0;
+}
+
+static int run_query(drizzle_con_st *con, drizzle_result_st *result,
+                     const char *query, int len)
+{
+  drizzle_return_t ret;
+  drizzle_result_st result_buffer;
+
+  if (result == NULL)
+    result= &result_buffer;
+
+  result= drizzle_query(con, result, query, len, &ret);
+
+  if (ret == DRIZZLE_RETURN_OK)
+    ret= drizzle_result_buffer(result);
+
+  if (result == &result_buffer)
+    drizzle_result_free(result);
+
+  return ret;
+}
+static int drop_schema(imp_dbh_t *imp_dbh, const char *schema)
+{
+  char query[200];
+
+  sprintf(query, "DROP DATABASE %s", schema);
+  if (run_query(imp_dbh->con, NULL, query, strlen(query)))
+  {
+    do_error(imp_dbh, drizzle_con_errno(imp_dbh->con),
+             drizzle_con_error(imp_dbh->con),
+             drizzle_con_sqlstate(imp_dbh->con));
+    return 1;
+  }
+  return 0;
+}
+
+static int create_schema(imp_dbh_t *imp_dbh, const char *schema)
+{
+  char query[200];
+
+  sprintf(query, "CREATE DATABASE %s", schema);
+
+  if (run_query(imp_dbh->con, NULL, query, strlen(query)))
+  {
+    do_error(imp_dbh, drizzle_con_errno(imp_dbh->con),
+             drizzle_con_error(imp_dbh->con),
+             drizzle_con_sqlstate(imp_dbh->con));
+    return 1;
+  }
+
 }

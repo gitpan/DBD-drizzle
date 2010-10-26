@@ -7,9 +7,10 @@ use vars qw(@ISA $VERSION $err $errstr $drh);
 use DBI ();
 use DynaLoader();
 use Carp ();
+use Data::Dumper;
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.301';
+$VERSION = '0.302';
 
 bootstrap DBD::drizzle $VERSION;
 
@@ -272,7 +273,8 @@ sub table_info ($) {
       (!defined($catalog) || $catalog eq "") &&
       (!defined($table) || $table eq ""))
   {
-    my $sth = $dbh->prepare("SHOW DATABASES") or return undef;
+    my $query = "select schema_name from information_schema.schemata";
+    my $sth = $dbh->prepare($query) or return undef;
 
     $sth->execute() or return DBI::set_err($dbh, $sth->err(), $sth->errstr());
 
@@ -336,7 +338,7 @@ sub table_info ($) {
 
     for my $database (@schemas)
     {
-      my $sth = $dbh->prepare("SHOW /*!50002 FULL*/ TABLES FROM " .
+      my $sth = $dbh->prepare("SHOW TABLES FROM " .
           $dbh->quote_identifier($database) .
           " LIKE " .  $dbh->quote($table)) or return undef;
 
@@ -373,16 +375,13 @@ sub _ListTables {
 
 
 sub column_info {
-  my ($dbh, $catalog, $schema, $table, $column) = @_;
+    my ($dbh, $catalog, $schema, $table, $column) = @_;
 
-  # ODBC allows a NULL to mean all columns, so we'll accept undef
-  $column = '%' unless defined $column;
+    my $ER_NO_SUCH_TABLE= 1146;
 
-  my $ER_NO_SUCH_TABLE= 1146;
+    my $table_id = $dbh->quote_identifier($catalog, $schema, $table);
 
-  my $table_id = $dbh->quote_identifier($catalog, $schema, $table);
-
-  my @names = qw(
+    my @names = qw(
       TABLE_CAT TABLE_SCHEM TABLE_NAME COLUMN_NAME
       DATA_TYPE TYPE_NAME COLUMN_SIZE BUFFER_LENGTH DECIMAL_DIGITS
       NUM_PREC_RADIX NULLABLE REMARKS COLUMN_DEF
@@ -395,164 +394,122 @@ sub column_info {
       drizzle_is_pri_key drizzle_type_name drizzle_values
       drizzle_is_auto_increment
       );
-  my %col_info;
 
-  local $dbh->{FetchHashKeyName} = 'NAME_lc';
-  # only ignore ER_NO_SUCH_TABLE in internal_execute if issued from here
-  my $desc_sth = $dbh->prepare("DESCRIBE $table_id " . $dbh->quote($column));
-  my $desc = $dbh->selectall_arrayref($desc_sth, { Columns=>{} });
+    my %col_info;
 
-  #return $desc_sth if $desc_sth->err();
-  if (my $err = $desc_sth->err())
-  {
-    # return the error, unless it is due to the table not 
-    # existing per DBI spec
-    if ($err != $ER_NO_SUCH_TABLE)
-    {
-      return undef;
-    }
-    $dbh->set_err(undef,undef);
-    $desc = [];
-  }
+    local $dbh->{FetchHashKeyName} = 'NAME_lc';
+    # only ignore ER_NO_SUCH_TABLE in internal_execute if issued from here
 
-  my $ordinal_pos = 0;
-  for my $row (@$desc)
-  {
-    my $type = $row->{type};
-    $type =~ m/^(\w+)(?:\((.*?)\))?\s*(.*)/;
-    my $basetype  = lc($1);
-    my $typemod   = $2;
-    my $attr      = $3;
+    my $query = 'select column_name, column_type, column_default, column_default_is_null,
+is_auto_increment, is_nullable, is_indexed, is_used_in_primary, is_unique,
+is_first_in_multi, data_type, numeric_scale, numeric_precision from
+data_dictionary.columns where table_schema = database() and table_name = ';
+    $query .= $dbh->quote($table);
+    # ODBC allows a NULL to mean all columns, so we'll accept undef
+    $query .= ' and column_name like ' . $dbh->quote($column) if defined $column;
 
-    my $info = $col_info{ $row->{field} }= {
-	    TABLE_CAT               => $catalog,
-	    TABLE_SCHEM             => $schema,
-	    TABLE_NAME              => $table,
-	    COLUMN_NAME             => $row->{field},
-	    NULLABLE                => ($row->{null} eq 'YES') ? 1 : 0,
-	    IS_NULLABLE             => ($row->{null} eq 'YES') ? "YES" : "NO",
-	    TYPE_NAME               => uc($basetype),
-	    COLUMN_DEF              => $row->{default},
-	    ORDINAL_POSITION        => ++$ordinal_pos,
-	    drizzle_is_pri_key        => ($row->{key}  eq 'PRI'),
-	    drizzle_type_name         => $row->{type},
-      drizzle_is_auto_increment => ($row->{extra} =~ /auto_increment/i ? 1 : 0),
-    };
-    #
-	  # This code won't deal with a pathalogical case where a value
-	  # contains a single quote followed by a comma, and doesn't unescape
-	  # any escaped values. But who would use those in an enum or set?
-    #
-	  my @type_params= ($typemod && index($typemod,"'")>=0) ?
-      ("$typemod," =~ /'(.*?)',/g)  # assume all are quoted
-			: split /,/, $typemod||'';      # no quotes, plain list
-	  s/''/'/g for @type_params;                # undo doubling of quotes
+    my $desc_sth = $dbh->prepare($query);
 
-	  my @type_attr= split / /, $attr||'';
+    my $desc;
+    $desc = $dbh->selectall_arrayref($desc_sth, { Columns=>{} });
 
-  	$info->{DATA_TYPE}= SQL_VARCHAR();
-    if ($basetype =~ /^(char|varchar|\w*text|\w*blob)/)
-    {
-      $info->{DATA_TYPE}= SQL_CHAR() if $basetype eq 'char';
-      if ($type_params[0])
-      {
-        $info->{COLUMN_SIZE} = $type_params[0];
-      }
-      else
-      {
-        $info->{COLUMN_SIZE} = 65535;
-        $info->{COLUMN_SIZE} = 255        if $basetype =~ /^tiny/;
-        $info->{COLUMN_SIZE} = 16777215   if $basetype =~ /^medium/;
-        $info->{COLUMN_SIZE} = 4294967295 if $basetype =~ /^long/;
-      }
+    #return $desc_sth if $desc_sth->err();
+    if (my $err = $desc_sth->err()) {
+        # return the error, unless it is due to the table not 
+        # existing per DBI spec
+        if ($err != $ER_NO_SUCH_TABLE) {
+            return undef;
+        }
+        $dbh->set_err(undef,undef);
+        $desc = [];
     }
-	  elsif ($basetype =~ /^(binary|varbinary)/)
-    {
-      $info->{COLUMN_SIZE} = $type_params[0];
-	    # SQL_BINARY & SQL_VARBINARY are tempting here but don't match the
-	    # semantics for drizzle (not hex). SQL_CHAR &  SQL_VARCHAR are correct here.
-	    $info->{DATA_TYPE} = ($basetype eq 'binary') ? SQL_CHAR() : SQL_VARCHAR();
-    }
-    elsif ($basetype =~ /^(enum|set)/)
-    {
-	    if ($basetype eq 'set')
-      {
-		    $info->{COLUMN_SIZE} = length(join ",", @type_params);
-	    }
-	    else
-      {
-        my $max_len = 0;
-        length($_) > $max_len and $max_len = length($_) for @type_params;
-        $info->{COLUMN_SIZE} = $max_len;
-	    }
-	    $info->{"drizzle_values"} = \@type_params;
-    }
-    elsif ($basetype =~ /int/)
-    { 
-      # big/medium/small/tiny etc + unsigned?
-	    $info->{DATA_TYPE} = SQL_INTEGER();
-	    $info->{NUM_PREC_RADIX} = 10;
-	    $info->{COLUMN_SIZE} = $type_params[0];
-    }
-    elsif ($basetype =~ /^decimal/)
-    {
-      $info->{DATA_TYPE} = SQL_DECIMAL();
-      $info->{NUM_PREC_RADIX} = 10;
-      $info->{COLUMN_SIZE}    = $type_params[0];
-      $info->{DECIMAL_DIGITS} = $type_params[1];
-    }
-    elsif ($basetype =~ /^(float|double)/)
-    {
-	    $info->{DATA_TYPE} = ($basetype eq 'float') ? SQL_FLOAT() : SQL_DOUBLE();
-	    $info->{NUM_PREC_RADIX} = 2;
-	    $info->{COLUMN_SIZE} = ($basetype eq 'float') ? 32 : 64;
-    }
-    elsif ($basetype =~ /date|time/)
-    { 
-      # date/datetime/time/timestamp
-	    if ($basetype eq 'time' or $basetype eq 'date')
-      {
-		    #$info->{DATA_TYPE}   = ($basetype eq 'time') ? SQL_TYPE_TIME() : SQL_TYPE_DATE();
-        $info->{DATA_TYPE}   = ($basetype eq 'time') ? SQL_TIME() : SQL_DATE(); 
-        $info->{COLUMN_SIZE} = ($basetype eq 'time') ? 8 : 10;
-      }
-	    else
-      {
-        # datetime/timestamp
-        #$info->{DATA_TYPE}     = SQL_TYPE_TIMESTAMP();
-		    $info->{DATA_TYPE}        = SQL_TIMESTAMP();
-		    $info->{SQL_DATA_TYPE}    = SQL_DATETIME();
-        $info->{SQL_DATETIME_SUB} = $info->{DATA_TYPE} - ($info->{SQL_DATA_TYPE} * 10);
-        $info->{COLUMN_SIZE}      = ($basetype eq 'datetime') ? 19 : $type_params[0] || 14;
-	    }
-	    $info->{DECIMAL_DIGITS}= 0; # no fractional seconds
-    }
-    elsif ($basetype eq 'year')
-    {	
-      # no close standard so treat as int
-	    $info->{DATA_TYPE}      = SQL_INTEGER();
-	    $info->{NUM_PREC_RADIX} = 10;
-	    $info->{COLUMN_SIZE}    = 4;
-	  }
-	  else
-    {
-	    Carp::carp("column_info: unrecognized column type '$basetype' of $table_id.$row->{field} treated as varchar");
-    }
-    $info->{SQL_DATA_TYPE} ||= $info->{DATA_TYPE};
-    #warn Dumper($info);
-  }
 
-  my $sponge = DBI->connect("DBI:Sponge:", '','') or 
-          return $dbh->DBI::set_err($DBI::err, "DBI::Sponge: $DBI::errstr");
+    my $ordinal_pos = 0;
+    for my $row (@$desc) {
+        my $type = $row->{column_type};
+        my $basetype  = lc($type);
 
-  my $sth = $sponge->prepare("column_info $table", {
+        my $info = $col_info{ $row->{column_name} }= {
+            TABLE_CAT               => $catalog,
+            TABLE_SCHEM             => $schema,
+            TABLE_NAME              => $table,
+            COLUMN_NAME             => $row->{column_name},
+            COLUMN_SIZE             => $row->{character_maximum_length},
+            NUM_PREC_RADIX          => $row->{numeric_precision},
+            NULLABLE                => ($row->{is_nullable} eq 'YES') ? 1 : 0,
+            IS_NULLABLE             => ($row->{is_nullable} eq 'YES') ? "YES" : "NO",
+            TYPE_NAME               => $row->{column_type}, 
+            COLUMN_DEF              => $row->{column_default},
+            ORDINAL_POSITION        => $row->{ordinal_position},
+            drizzle_is_pri_key        => $row->{is_used_in_primary} eq 'YES' ? 1 : 0,
+            drizzle_is_first_in_multi => $row->{is_first_in_multi} eq 'YES' ? 1 : 0,
+            drizzle_type_name         => $row->{type},
+            drizzle_is_auto_increment => $row->{is_auto_increment} eq 'YES' ? 1 : 0,
+        };
+
+        if ($basetype =~ /text|blob/) {
+            if ($info->{COLUMN_SIZE} == 0) {
+                $info->{COLUMN_SIZE} = 65535;
+            }
+        }
+        elsif ($basetype =~ /char|varchar/) {
+            $info->{COLUMN_SIZE} = $row->{character_maximum_length},
+        }
+        elsif ($basetype =~ /int/) { 
+            $info->{DATA_TYPE} = SQL_INTEGER();
+            $info->{COLUMN_SIZE} = 12;
+        }
+        elsif ($basetype =~ /^decimal/) {
+            $info->{DATA_TYPE} = SQL_DECIMAL();
+            $info->{COLUMN_SIZE}    = 32; 
+            # not supported yet (?)
+            # $info->{DECIMAL_DIGITS} = ? 
+        }
+        elsif ($basetype =~ /^(float|double)/) {
+            $info->{DATA_TYPE} = ($basetype eq 'float') ? SQL_FLOAT() : SQL_DOUBLE();
+            $info->{COLUMN_SIZE} = ($basetype eq 'float') ? 32 : 64;
+        }
+        elsif ($basetype =~ /date|time/)
+        { 
+            # date/datetime/time/timestamp
+            if ($basetype eq 'time' or $basetype eq 'date') {
+                #$info->{DATA_TYPE} = ($basetype eq 'time') ? SQL_TYPE_TIME() : SQL_TYPE_DATE();
+                $info->{DATA_TYPE}   = ($basetype eq 'time') ? SQL_TIME() : SQL_DATE(); 
+                $info->{COLUMN_SIZE} = ($basetype eq 'time') ? 8 : 10;
+            }
+            else {
+                # datetime/timestamp
+                #$info->{DATA_TYPE}     = SQL_TYPE_TIMESTAMP();
+                $info->{DATA_TYPE}        = SQL_TIMESTAMP();
+                $info->{SQL_DATA_TYPE}    = SQL_DATETIME();
+                $info->{SQL_DATETIME_SUB} = $info->{DATA_TYPE} - ($info->{SQL_DATA_TYPE} * 10);
+                $info->{COLUMN_SIZE}      = $basetype eq 'datetime' ? 19 : 14;
+            }
+            $info->{DECIMAL_DIGITS}= 0; # no fractional seconds
+        }
+        elsif ($basetype eq 'year') {	
+            # no close standard so treat as int
+            $info->{DATA_TYPE}      = SQL_INTEGER();
+            $info->{NUM_PREC_RADIX} = 10;
+            $info->{COLUMN_SIZE}    = 4;
+        }
+        else {
+            Carp::carp("column_info: unrecognized column type '$basetype' of $table_id.$row->{field} treated as varchar");
+        }
+        $info->{SQL_DATA_TYPE} ||= $info->{DATA_TYPE};
+    }
+
+    my $sponge = DBI->connect("DBI:Sponge:", '','') or 
+        return $dbh->DBI::set_err($DBI::err, "DBI::Sponge: $DBI::errstr");
+
+    my $sth = $sponge->prepare("column_info $table", {
       rows          => [ map { [ @{$_}{@names} ] } values %col_info ],
       NUM_OF_FIELDS => scalar @names,
       NAME          => \@names,
       }) or
-  return ( $dbh->DBI::set_err($sponge->err(), $sponge->errstr()));
+    return ( $dbh->DBI::set_err($sponge->err(), $sponge->errstr()));
 
-  return $sth;
+    return $sth;
 }
 
 
@@ -607,9 +564,9 @@ sub foreign_key_info {
 
     my $sql = <<'EOF';
 SELECT NULL AS PKTABLE_CAT,
-       A.REFERENCED_TABLE_SCHEMA AS PKTABLE_SCHEM,
-       A.REFERENCED_TABLE_NAME AS PKTABLE_NAME,
-       A.REFERENCED_COLUMN_NAME AS PKCOLUMN_NAME,
+       NULL AS PKTABLE_SCHEM,
+       NULL AS PKTABLE_NAME,
+       NULL AS PKCOLUMN_NAME,
        A.TABLE_CATALOG AS FKTABLE_CAT,
        A.TABLE_SCHEMA AS FKTABLE_SCHEM,
        A.TABLE_NAME AS FKTABLE_NAME,
@@ -638,12 +595,12 @@ EOF
 #    }
 
     if (defined $pk_schema) {
-        push @where, 'A.REFERENCED_TABLE_SCHEMA = ?';
+        push @where, 'A.TABLE_SCHEMA = ?';
         push @bind, $pk_schema;
     }
 
     if (defined $pk_table) {
-        push @where, 'A.REFERENCED_TABLE_NAME = ?';
+        push @where, 'A.TABLE_NAME = ?';
         push @bind, $pk_table;
     }
 

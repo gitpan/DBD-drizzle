@@ -1,6 +1,13 @@
+2010-10-26 Patrick Galbraith <patg@patg.net> (0.302)
+* Bumped version as it was not bumped previously.
+
 2010-09-14 Patrick Galbraith <patg@patg.net> (0.301)
 * Removed drizzle_refresh call from drizzle.xs
 * Removed non-C90 declarations
+* Extensive work on column_info to work with I_S and data_dictionary 
+  instead of using 'describe' or 'show' commands
+* Removed old drop_schema() and create_schema() commands (these are what
+  mysqladmin used to use). These should need to be reimplemented locally
 
 2009-08-05 Patrick Galbraith <patg@patg.net> (0.300)
 

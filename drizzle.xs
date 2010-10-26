@@ -136,14 +136,18 @@ void _admin_internal(drh,dbh,command,dbname=NULL,host=NULL,port=NULL,user=NULL,p
   {
     (void) drizzle_shutdown(con, &res, DRIZZLE_SHUTDOWN_DEFAULT, &retval);
   }
+  /*
   else if (strEQ(command, "createdb"))
   {
-      (void) drizzle_command_write(con, &res, DRIZZLE_COMMAND_CREATE_DB, (uint8_t *)dbname, strlen(dbname), strlen(dbname), &retval);
+      D_imp_dbh(dbh);
+      (void) create_schema(imp_dbh, &res, dbname);
   }
   else if (strEQ(command, "dropdb"))
   {
-      (void) drizzle_command_write(con, &res, DRIZZLE_COMMAND_DROP_DB, (uint8_t *)dbname, strlen(dbname), strlen(dbname), &retval);
+      D_imp_dbh(dbh);
+      (void) drop_schema(imp_dbh, &res, dbname);
   }
+    */
   else
   {
     croak("Unknown command: %s", command);

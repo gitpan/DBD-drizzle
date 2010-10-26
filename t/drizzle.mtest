@@ -2,9 +2,9 @@
          'nofoundrows' => 0,
          'ssl' => 0,
          'testdb' => 'test',
-         'cflags' => '-I/usr/local/drizzle/include',
+         'cflags' => '-I/usr/local/drizzle/include/',
          'nocatchstderr' => 0,
-         'libs' => '-L/usr/local/lib -ldrizzle -lz -lm -lcrypt -lnsl'
+         'libs' => '-L/usr/local/drizzle/lib -ldrizzle'
        };
 $::test_host = $opt->{'testhost'};
 $::test_port = $opt->{'testport'};

@@ -12,7 +12,8 @@ Installation
 -------------
 You should only have to run the following:
 
-perl Makefile.PL --cflags=-I/usr/local/libdrizzle
+perl Makefile.PL --cflags=-I/usr/local/drizzle/include/ --libs=-"L/usr/local/drizzle/lib -ldrizzle"
+
 
 Depending on where libdrizzle is installed. Also, you'll want to make 
 sure that ldconfig has configured libdrizzle to be in your library path 
