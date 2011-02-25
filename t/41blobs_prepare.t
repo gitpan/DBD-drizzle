@@ -101,6 +101,7 @@ cmp_ok $$row[1], 'eq', $blob2, ShowBlob($blob2);
 
 ok ($sth->finish);
 
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table"), "drop $table";
 
 ok $dbh->disconnect;

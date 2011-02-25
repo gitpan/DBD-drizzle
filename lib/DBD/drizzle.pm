@@ -10,7 +10,7 @@ use Carp ();
 use Data::Dumper;
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.302';
+$VERSION = '0.303';
 
 bootstrap DBD::drizzle $VERSION;
 
@@ -444,7 +444,7 @@ data_dictionary.columns where table_schema = database() and table_name = ';
             drizzle_is_pri_key        => $row->{is_used_in_primary} eq 'YES' ? 1 : 0,
             drizzle_is_first_in_multi => $row->{is_first_in_multi} eq 'YES' ? 1 : 0,
             drizzle_type_name         => $row->{type},
-            drizzle_is_auto_increment => $row->{is_auto_increment} eq 'YES' ? 1 : 0,
+            drizzle_is_auto_increment => $row->{is_auto_increment},
         };
 
         if ($basetype =~ /text|blob/) {

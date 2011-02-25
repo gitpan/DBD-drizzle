@@ -26,6 +26,7 @@ ok($dbh->do("DROP TABLE IF EXISTS $table"), "making slate clean");
 
 ok($dbh->do("CREATE TABLE $table (id INT, name VARCHAR(64))"), "creating $table");
 
+$dbh->{AutoCommit} = 1;
 ok($dbh->do("DROP TABLE $table"), "dropping created $table");
 
 $dbh->disconnect();

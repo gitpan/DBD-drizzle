@@ -40,28 +40,29 @@ my $size= 128;
 
 ok $dbh->do("DROP TABLE IF EXISTS $table"), "Drop table if exists $table";
 
+$dbh->{mysql_enable_utf8}=1;
+
 my $create = <<EOT;
 CREATE TABLE $table (
     id INT NOT NULL DEFAULT 0,
-    name BLOB )
+    name BLOB)
 EOT
 
 ok ($dbh->do($create));
 
-my ($blob, $qblob) = "";
-my $b = "";
+my ($b, $blob) = ("","");
+
 for ($j = 0;  $j < 256;  $j++) {
     $b .= chr($j);
 }
 for ($i = 0;  $i < $size;  $i++) {
     $blob .= $b;
 }
-ok ($qblob = $dbh->quote($blob));
-
 #   Insert a row into the test table.......
-my ($query);
-$query = "INSERT INTO $table VALUES(1, $qblob)";
-ok ($dbh->do($query));
+my $query = "INSERT INTO $table VALUES(1, ?)";
+ok ($sth = $dbh->prepare($query));
+
+ok ($sth->execute($blob));
 
 #   Now, try SELECT'ing the row out.
 ok ($sth = $dbh->prepare("SELECT * FROM $table WHERE id = 1"));
@@ -75,13 +76,19 @@ ok defined($row), "row returned defined";
 is @$row, 2, "records from $table returned 2";
 
 is $$row[0], 1, 'id set to 1';
+my $blob_out = $$row[1];
 
-cmp_ok byte_string($$row[1]), 'eq', byte_string($blob), 'blob set equal to blob returned';
+print $fh $blob_out;
+close $fh;
+print $fh2 $blob;
+close $fh2;
+cmp_ok byte_string($blob_out, 'eq', byte_string($blob), 'blob set equal to blob returned';
 
-ShowBlob($blob), ShowBlob(defined($$row[1]) ? $$row[1] : "");
+ShowBlob($blob), ShowBlob(defined($blob_out) ? $blob_out : "");
 
 ok ($sth->finish);
 
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table"), "Drop table $table";
 
 ok $dbh->disconnect;

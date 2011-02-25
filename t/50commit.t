@@ -165,6 +165,7 @@ print "create $create\n";
 
   ok $got_warning, "Should be warning defined upon rollback of non-trx table"; 
 
+  $dbh->{AutoCommit} = 1;
   ok $dbh->do("DROP TABLE $table");
   ok $dbh->disconnect();
 }

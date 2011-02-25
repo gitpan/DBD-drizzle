@@ -85,6 +85,7 @@ cmp_ok $ref->[0], 'eq', DBI::SQL_INTEGER(), "SQL_INTEGER";
 
 cmp_ok $ref->[1], 'eq', DBI::SQL_VARCHAR(), "SQL_VARCHAR";
 
+$dbh->{AutoCommit} = 1;
 ok ($sth= $dbh->prepare("DROP TABLE $table"));
 
 ok($sth->execute);

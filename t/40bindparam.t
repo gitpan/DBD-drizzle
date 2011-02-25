@@ -112,6 +112,7 @@ $ref = $sth->fetch;
 is $id, 7, '$id set to 7';
 cmp_ok $name, 'eq', '?', "\$name set to '?'";
 
+$dbh->{AutoCommit} = 1;
 ok ($dbh->do("DROP TABLE $table"));
 
 ok $sth->finish;

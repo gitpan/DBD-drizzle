@@ -1,3 +1,9 @@
+2011-02-24 Patrick Galbraith <patg@patg.net> (0.303)
+* Fixed various tests that fail due to error "Transactional DDL not supported"
+* Fixed is_auto_increment handle parameter which needed to be interpolated
+  from 'YES' to 1, which is automatically now set to 1
+* Other code cleanups
+
 2010-10-26 Patrick Galbraith <patg@patg.net> (0.302)
 * Bumped version as it was not bumped previously.
 

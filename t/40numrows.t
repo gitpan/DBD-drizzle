@@ -86,6 +86,7 @@ ok ($aref= $sth->fetchall_arrayref);
 
 is scalar @$aref, 3, 'Verified rows should be 3';
 
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table"), "drop table $table";
 
 ok $dbh->disconnect;

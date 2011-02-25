@@ -53,6 +53,7 @@ ok ($rows = $dbh->selectall_arrayref("SELECT * FROM $table"));
 
 ok !defined($rows->[0][1]);
 
+$dbh->{AutoCommit} = 1;
 ok ($dbh->do("DROP TABLE $table"));
 
 ok ($dbh->disconnect());

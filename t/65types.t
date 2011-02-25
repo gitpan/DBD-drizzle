@@ -41,7 +41,9 @@ ok $sth->bind_param(1,10001,DBI::SQL_INTEGER);
   
 ok $sth->execute();
 
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table");
+$dbh->{AutoCommit} = 0;
 
 ok $dbh->do("create table $table (a int, b double, primary key (a))");
 
@@ -62,7 +64,8 @@ ok $sth->bind_param(2,.3333333,DBI::SQL_DOUBLE);
 ok $sth->execute();
 
 ok $sth->finish;
-
+  
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table");
 
 ok $dbh->disconnect;

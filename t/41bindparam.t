@@ -33,6 +33,7 @@ ok $sth->bind_param(1,10001,DBI::SQL_INTEGER), "bind param 10001 col1";
   
 ok $sth->execute(), 'execute';
 
+$dbh->{AutoCommit} = 1;
 ok ($sth= $dbh->prepare("DROP TABLE $table"));
 
 ok $sth->execute();

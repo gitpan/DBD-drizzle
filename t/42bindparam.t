@@ -42,6 +42,7 @@ ok $sth->bind_param(2,.3333333,DBI::SQL_DOUBLE);
   
 ok $sth->execute();
 
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table");
 
 ok $sth->finish;

@@ -38,7 +38,9 @@ is_deeply($sth->{TYPE}, [ 3 ], "checking column type");
 
 ok($sth->finish);
 
+$dbh->{AutoCommit} = 1;
 ok($dbh->do(qq{DROP TABLE t1}), "cleaning up");
+$dbh->{AutoCommit} = 0;
 
 #
 # Bug #23936: bind_param() doesn't work with SQL_DOUBLE datatype
@@ -56,7 +58,9 @@ ok($sth->finish);
 
 is_deeply($dbh->selectall_arrayref("SELECT * FROM t1"), [ ['2.1'],  ['-1'] ]);
 
+$dbh->{AutoCommit} = 1;
 ok($dbh->do(qq{DROP TABLE t1}), "cleaning up");
+$dbh->{AutoCommit} = 0;
 
 #
 # [rt.cpan.org #19212] Mysql Unsigned Integer Fields
@@ -67,6 +71,7 @@ ok($dbh->do(qq{INSERT INTO t1 VALUES (0),(4294967295)}), "loading data");
 is_deeply($dbh->selectall_arrayref("SELECT * FROM t1"),
           [ ['0'],  ['4294967295'] ]);
 
+$dbh->{AutoCommit} = 1;
 ok($dbh->do(qq{DROP TABLE t1}), "cleaning up");
 };
 

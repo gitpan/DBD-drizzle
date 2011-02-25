@@ -41,6 +41,7 @@ is_deeply($key_info, $expect, "Check primary_key_info results");
 is_deeply([ $dbh->primary_key(undef, undef, $table) ], [ 'a', 'b' ],
           "Check primary_key results");
 
+$dbh->{AutoCommit} = 1;
 ok($dbh->do("DROP TABLE $table"), "Dropped table");
 
 $dbh->disconnect();

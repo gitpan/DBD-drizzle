@@ -16,7 +16,7 @@ my $dbh;
 eval {$dbh= DBI->connect($test_dsn, $test_user, $test_password,
                       { RaiseError            => 1,
                         PrintError            => 1,
-                        AutoCommit            => 0,
+                        AutoCommit            => 1,
                         drizzle_server_prepare  => 0 });};
 
 if ($@) {
@@ -78,6 +78,7 @@ SKIP: {
   is($info->[0]->{FKTABLE_NAME}, "child");
   is($info->[0]->{FKCOLUMN_NAME}, "parent_id");
 
+$dbh->{AutoCommit} = 1;
   ok($dbh->do(qq{DROP TABLE IF EXISTS child, parent}), "cleaning up");
 };
 

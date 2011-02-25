@@ -64,5 +64,6 @@ for $ref (@$rows) {
 }
 ok $sth->finish;
 ok $sth2->finish;
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table"), "drop $table";
 ok $dbh->disconnect;

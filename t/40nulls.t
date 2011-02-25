@@ -47,6 +47,7 @@ ok defined($$aref[1]);
 
 ok $sth->finish;
 
+$dbh->{AutoCommit} = 1;
 ok $dbh->do("DROP TABLE $table");
 
 ok $dbh->disconnect;

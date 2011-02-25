@@ -38,6 +38,7 @@ ok(not $sth->fetchrow_arrayref());
 
 ok($sth->finish());
 
+$dbh->{AutoCommit} = 1;
 ok($dbh->do("DROP TABLE $table"),"Dropping table");
 
 $dbh->disconnect();
