@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               DBD-drizzle
-version:            0.303
+version:            0.304
 abstract:           A libdrizzle driver for the Perl5 Database Interface (DBI)
 author:
     - Patrick Galbraith <patg@patg.net>, Clint Byrum <clint@fewbar.com>

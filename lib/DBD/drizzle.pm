@@ -10,7 +10,7 @@ use Carp ();
 use Data::Dumper;
 @ISA = qw(DynaLoader);
 
-$VERSION = '0.303';
+$VERSION = '0.304';
 
 bootstrap DBD::drizzle $VERSION;
 

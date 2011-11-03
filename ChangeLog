@@ -1,3 +1,6 @@
+2011-11-03 Patrick Galbraith <patg@patg.net> (0.304)
+* Fixed Makefile.PL to be smarter, more convenient in how it obtains include 
+  and library paths, as well as user info
 2011-02-24 Patrick Galbraith <patg@patg.net> (0.303)
 * Fixed various tests that fail due to error "Transactional DDL not supported"
 * Fixed is_auto_increment handle parameter which needed to be interpolated

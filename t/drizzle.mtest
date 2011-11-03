@@ -1,15 +1,17 @@
 { local $opt = {
-         'nofoundrows' => 0,
          'ssl' => 0,
-         'testdb' => 'test',
-         'cflags' => '-I/usr/local/drizzle/include',
          'nocatchstderr' => 0,
-         'libs' => '-L/usr/local/drizzle/lib -ldrizzle -lz -lm -lcrypt -lnsl'
+         'libs' => '-L/usr/lib -ldrizzle -lz -lm -lcrypt -lnsl',
+         'nofoundrows' => 0,
+         'testdb' => 'test',
+         'cflags' => '-I/usr/include/libdrizzle-1.0',
+         'testuser' => 'root',
+         'testpassword' => ''
        };
 $::test_host = $opt->{'testhost'};
 $::test_port = $opt->{'testport'};
-$::test_user = '';
-$::test_password = '';
+$::test_user = $opt->{'testuser'};
+$::test_password = $opt->{'testpassword'};
 $::test_db = $opt->{'testdb'};
 $::test_dsn = "DBI:drizzle:$::test_db";
 $::test_dsn .= ":$::test_host" if $::test_host;

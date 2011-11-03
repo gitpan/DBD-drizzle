@@ -4,12 +4,12 @@ BEGIN {
     use Config;
 
     if ($] == 5.008 && $ENV{"LANG"} ne "C") {
-	$ENV{LANG} = "C";
-	print STDERR "\n\n\n\$ENV{LANG} is not 'C' execing 'perl Makefile.PL'".
-	" with ENV{LANG} == 'C'\n You can skip this check by: 'export ".
-	"LANG='C' before running 'perl Makefile.PL or by upgrading your Perl'\n\n\n";
+    $ENV{LANG} = "C";
+    print STDERR "\n\n\n\$ENV{LANG} is not 'C' execing 'perl Makefile.PL'".
+    " with ENV{LANG} == 'C'\n You can skip this check by: 'export ".
+    "LANG='C' before running 'perl Makefile.PL or by upgrading your Perl'\n\n\n";
 
-	sleep(5);
+    sleep(5);
         exec ($Config{perlpath}, $0, @ARGV )|| die $!;
     }
 }
@@ -22,6 +22,9 @@ use File::Path;
 use File::Copy;
 require DBI::DBD;
 
+# Set the variable $File::Find::dont_use_nlink if you're using AFS,
+# since AFS cheats.
+
 my $TESTDB = "test";
 
 use vars qw($opt);
@@ -33,6 +36,8 @@ Getopt::Long::GetOptions(
     "testdb=s",
     "testhost=s",
     "testport=s",
+    "testuser=s",
+    "testpassword=s",
     "cflags=s",
     "libs=s",
     "verbose",
@@ -45,10 +50,13 @@ Getopt::Long::GetOptions(
 
 my $source = {};
 
+my $header;
 if ($^O !~ /mswin32/i)
 {
   #Check for pkg-config first
   $source->{'pkg-config'}="guessed";
+  # this is a bit verbose and a more elegant solution is in store
+      
   if ($opt->{'pkg-config'})
   {  
     if (-f $opt->{'pkg-config'})
@@ -80,7 +88,7 @@ MSG
   }
 }
 
-for my $key (qw/testdb testhost cflags libs nocatchstderr ssl nofoundrows
+for my $key (qw/testdb testhost testuser testpassword cflags libs nocatchstderr ssl nofoundrows
               bind-type-guessing/)
 {
   Configure($opt, $source, $key);
@@ -107,7 +115,7 @@ for my $val (values %$source)
 for my $key (sort { $a cmp $b} keys %$opt)
 {
   printf("  %-" . $keylen . "s (%-" . $slen . "s) = %s\n",
-	 $key, $source->{$key}, $opt->{$key})
+     $key, $source->{$key}, $opt->{$key})
 }
 
 print <<"MSG";
@@ -128,16 +136,16 @@ my $fileName = $@ ?
   "t/drizzle.mtest" : File::Spec->catfile("t", "drizzle.mtest");
 (open(FILE, ">$fileName") &&
  (print FILE ("{ local " . Data::Dumper->Dump([$opt], ["opt"]) .
-	      "\$::test_host = \$opt->{'testhost'};\n" .
-	      "\$::test_port = \$opt->{'testport'};\n" .
-	      "\$::test_user = '';\n" .
-	      "\$::test_password = '';\n" .
-	      "\$::test_db = \$opt->{'testdb'};\n" .
-	      "\$::test_dsn = \"DBI:drizzle:\$::test_db\";\n" .
+          "\$::test_host = \$opt->{'testhost'};\n" .
+          "\$::test_port = \$opt->{'testport'};\n" .
+          "\$::test_user = \$opt->{'testuser'};\n" .
+          "\$::test_password = \$opt->{'testpassword'};\n" .
+          "\$::test_db = \$opt->{'testdb'};\n" .
+          "\$::test_dsn = \"DBI:drizzle:\$::test_db\";\n" .
               "\$::test_dsn .= \":\$::test_host\" if \$::test_host;\n" .
-	      "\$::test_dsn .= \":\$::test_port\" if \$::test_port;\n".
+          "\$::test_dsn .= \":\$::test_port\" if \$::test_port;\n".
               $dsn .
-	      "} 1;\n"))  &&
+          "} 1;\n"))  &&
   close(FILE))  ||  die "Failed to create $fileName: $!";
 
 
@@ -150,29 +158,29 @@ $cflags .= " -DDBD_DRIZZLE_INSERT_ID_IS_GOOD" if $DBI::VERSION > 1.42;
 $cflags .= " -DDBD_NO_CLIENT_FOUND_ROWS" if $opt->{'nofoundrows'};
 $cflags .= " -g ";
 my %o = ( 'NAME' => 'DBD::drizzle',
-	  'INC' => $cflags,
-	  'dist'         => { 'SUFFIX'       => ".gz",
-			      'DIST_DEFAULT' => 'all installhtml tardist',
-			      'COMPRESS'     => "gzip -9f" },
-	  'clean' => { 'FILES' => '*.xsi' },
-		'realclean' => { 'FILES' => 't/drizzle.mtest' },
+      'INC' => $cflags,
+      'dist'         => { 'SUFFIX'       => ".gz",
+                  'DIST_DEFAULT' => 'all installhtml tardist',
+                  'COMPRESS'     => "gzip -9f" },
+      'clean' => { 'FILES' => '*.xsi' },
+        'realclean' => { 'FILES' => 't/drizzle.mtest' },
           'C' => ["dbdimp.c", "drizzle.c"],
           'XS' => {'drizzle.xs' => 'drizzle.c'},
-	  'OBJECT' => '$(O_FILES)',
-	  'LIBS' => $opt->{'libs'},
-	  'VERSION_FROM' => 'lib/DBD/drizzle.pm'
-	);
+      'OBJECT' => '$(O_FILES)',
+      'LIBS' => $opt->{'libs'},
+      'VERSION_FROM' => 'lib/DBD/drizzle.pm'
+    );
 
 
 if ($ExtUtils::MakeMaker::VERSION >= 5.43) {
   $o{'CAPI'} = 'TRUE'
     if ($ExtUtils::MakeMaker::VERSION >= 5.43
-	&&  $Config::Config{'archname'} =~ /-object\b/i);
+    &&  $Config::Config{'archname'} =~ /-object\b/i);
   $o{'AUTHOR'} = 'Patrick Galbraith <patg@patg.net>, Clint Byrum <clint@fewbar.com>';
   $o{'ABSTRACT'} =
     'A libdrizzle driver for the Perl5 Database Interface (DBI)';
   $o{'PREREQ_PM'} = { 'DBI' => 1.08,
-		      'Data::Dumper' => 0 };
+              'Data::Dumper' => 0 };
 }
 
 ExtUtils::MakeMaker::WriteMakefile(%o);
@@ -211,13 +219,13 @@ Possible options are:
   --nocatchstderr        Supress using the "myld" script that redirects
                          STDERR while running the linker.
   --nofoundrows          Change the behavior of \$sth->rows() so that it
-  			                 returns the number of rows physically modified 
-			                   instead of the rows matched
+                               returns the number of rows physically modified 
+                               instead of the rows matched
   --bind-type-guessing   Toggle the use of driver attribute mysql_bind_type_guessing 
                          This feature makes it so driver-emulated prepared statements
                          try to "guess" if a value being bound is numeric, in which 
                          case, quotes will not be put around the value.
-  --ssl			             Enable SSL support (not supported yet)
+  --ssl                         Enable SSL support (not supported yet)
   --help                 Print this message and exit
 
 All options may be configured on the command line. If they are
@@ -258,55 +266,33 @@ sub Configure
     $source->{$param} = "User's choice";
     return;
   }
+  if ($param eq 'testuser') {
+        unless ($opt->{$param}) {
+            my $user = $ENV{USER} || '';
+        print "
+
+PLEASE NOTE:
+
+For 'make test' to run properly, you must ensure that the 
+database user '$user' can connect to your MySQL server 
+and has the proper privileges that these tests require such 
+as 'drop table', 'create table', 'drop procedure', 'create procedure'
+as well as others. 
+
+You can also optionally set the user to run 'make test' with:
+
+perl Makefile.PL --testuser=username
+
+";
+      $opt->{$param} = $user;
+      $source->{$param} = 'guessed';
+      }
+  }
   if ($param eq "testdb") 
   {
     $source->{$param} = "default";
     $opt->{$param} = $TESTDB;
   }
-
-#   if ($^O !~ /mswin32/i)
-#   {
-#     # First try to get options values from pkg-config
-#       unless ($param eq '--libs' && $param eq '--cflags') {
-#           my $command = $opt->{'pkg-config'} . " --$param libdrizzle" unless $param eq '--libs' && $param eq '--cflags';
-#           eval 
-#           {
-#               print "running $command\n";
-#               open(PIPE, "$command |") or die "Can't find pkg-config.";
-#           };
-# 
-#           if (!$@)
-#           {
-#               my $str = "";
-#               while (defined(my $line = <PIPE>)) 
-#               {
-#                   $str .= $line;
-#               }
-#               if ($param eq 'libs') {
-#                 $str .= ' -lz';
-#               }
-#               if ($str ne ""  &&  $str !~ /Options:/) 
-#               {
-#                   $str =~ s/\s+$//s;
-#                   $str =~ s/^\s+//s;
-# 
-# # Unfortunately ExtUtils::MakeMaker doesn't deal very well
-# # with -L'...'
-#                   $str =~ s/\-L\'(.*?)\'/-L$1/sg;
-#                   $str =~ s/\-L\"(.*?)\"/-L$1/sg;
-# 
-#                   $opt->{$param} = $str;
-#                   $source->{$param} = "pkg-config";
-#                   return;
-#               }
-#           }
-#       }
-#       else
-#       {
-#           print "Can't find pkg-config. Use --pkg-config option to specify where pkg-config is located\n";
-#       }
-#  }
-
   if ($param eq "nocatchstderr" || $param eq "nofoundrows")
   {
     $source->{$param} = "default";
@@ -315,11 +301,17 @@ sub Configure
   elsif ($param eq 'testdb' || $param eq 'testhost') 
   {
   }
+  elsif ($param eq 'testpassword') {
+      $source->{$param} = "default";
+      $opt->{$param} = "";
+    
+  }
   elsif ($param eq "cflags") 
   {
     $source->{$param} = "guessed";
-    my $dir = SearchFor('include', 'drizzle.h');
+    my $dir = SearchFor('include/libdrizzle-1.0/libdrizzle', 'drizzle_client.h');
     if ($dir) {
+      $dir =~ s/\/libdrizzle$//;
       $opt->{$param} = "-I$dir";
       return;
     }
@@ -378,26 +370,26 @@ sub SearchFor {
   my($subdir, @files) = @_;
   $haveFileSpec = eval { require File::Spec } unless defined($haveFileSpec);
 
-  my @dirs = ($^O =~ /mswin32/i) ? qw(C:) : qw(/usr/local /usr /opt);
+  my @dirs = ($^O =~ /mswin32/i) ? qw(C:) : qw(/usr/local /usr /usr/local/drizzle /opt);
   unshift(@dirs, $fineDir) if defined($fineDir);
 
   for my $f (@files) {
     for my $dir (@dirs) {
       my $try1 = $haveFileSpec ?
-	File::Spec->catdir($dir, $subdir) : "$dir/$subdir";
+    File::Spec->catdir($dir, $subdir) : "$dir/$subdir";
       my $try2 = $haveFileSpec ?
-	File::Spec->catdir($dir, "drizzle") : "$dir/drizzle";
+    File::Spec->catdir($dir, "drizzle") : "$dir/drizzle";
       my $try3 = $haveFileSpec ?
-	File::Spec->catdir($try1, "drizzle") : "$try1/drizzle";
+    File::Spec->catdir($try1, "drizzle") : "$try1/drizzle";
       my $try4 = $haveFileSpec ?
-	File::Spec->catdir($try2, $subdir) : "$try2/$subdir";
+    File::Spec->catdir($try2, $subdir) : "$try2/$subdir";
       for my $path ($try3, $try4, $try2, $try1, $dir) {
-	my $file = $haveFileSpec ?
-	  File::Spec->catfile($path, $f) : "$path/$f";
-	if (-f $file) {
-	  $fineDir = $dir;
-	  return $path;
-	}
+    my $file = $haveFileSpec ?
+      File::Spec->catfile($path, $f) : "$path/$f";
+    if (-f $file) {
+      $fineDir = $dir;
+      return $path;
+    }
       }
     }
   }
@@ -525,3 +517,5 @@ sub dynamic_lib {
   }
   return $result;
 }
+
+
